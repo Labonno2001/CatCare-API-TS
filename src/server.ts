@@ -10,7 +10,10 @@ import feedingRoutes from "./routes/feeding.routes";
 import waterRoutes from "./routes/water.routes";
 import wellnessRoutes from "./routes/wellness.routes";
 
-import { errorHandler } from "./middleware/error.middleware";
+import {
+    notFoundHandler,
+    errorHandler
+} from "./middleware/error.middleware";
 
 dotenv.config();
 
@@ -43,6 +46,9 @@ app.get("/api/health", (_req, res: Response) => {
         timestamp: new Date()
     });
 });
+
+// Handle unknown routes
+app.use(notFoundHandler);
 
 // Centralized error handler — must be last
 app.use(errorHandler);

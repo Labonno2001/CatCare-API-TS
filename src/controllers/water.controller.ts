@@ -10,28 +10,65 @@ import {
     deleteWaterRecord
 } from "../services/water.service";
 
-// Validate water record input
-const isValidWaterInput = (body: any): boolean => {
-    return (
-        body.offeredMl !== undefined &&
-        Number.isFinite(Number(body.offeredMl)) &&
-        Number(body.offeredMl) >= 0 &&
-        typeof body.measured === "boolean" &&
-        (body.notes === undefined || typeof body.notes === "string") &&
+// Define the accepted water request structure
+interface WaterInputBody {
+    offeredMl: number | string;
+    consumedMl?: number | string | null;
+    measured: boolean;
+    notes?: string;
+}
+
+// Safely validate an unknown request body
+const isValidWaterInput = (body: unknown): body is WaterInputBody => {
+    if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body)
+    ) {
+        return false;
+    }
+
+    const input = body as Record<string, unknown>;
+
+    const validOfferedMl =
+        (typeof input.offeredMl === "number" ||
+            typeof input.offeredMl === "string") &&
+        Number.isFinite(Number(input.offeredMl)) &&
+        Number(input.offeredMl) >= 0;
+
+    const validNotes =
+        input.notes === undefined ||
+        typeof input.notes === "string";
+
+    const validConsumedMl =
+        input.measured === false ||
         (
-            body.measured === false ||
-            (
-                body.consumedMl !== undefined &&
-                body.consumedMl !== null &&
-                body.consumedMl !== "" &&
-                Number.isFinite(Number(body.consumedMl)) &&
-                Number(body.consumedMl) >= 0
-            )
-        )
+            (typeof input.consumedMl === "number" ||
+                typeof input.consumedMl === "string") &&
+            Number.isFinite(Number(input.consumedMl)) &&
+            Number(input.consumedMl) >= 0
+        );
+
+    return (
+        validOfferedMl &&
+        typeof input.measured === "boolean" &&
+        validNotes &&
+        validConsumedMl
     );
 };
 
-// 1. Get all water records
+// Validate record ID
+const isValidId = (id: string | string[]): boolean => {
+    if (typeof id !== "string") {
+        return false;
+    }
+
+    const numericId = Number(id);
+
+    return Number.isInteger(numericId) && numericId > 0;
+};
+
+// 1. GET all water records
 export const getAllWaterRecordsController = (
     _req: Request,
     res: Response
@@ -50,7 +87,7 @@ export const createWaterRecordController = (
     req: Request,
     res: Response
 ): void => {
-    if (!req.body || !isValidWaterInput(req.body)) {
+    if (!isValidWaterInput(req.body)) {
         res.status(400).json({
             success: false,
             message: "Please enter valid water details."
@@ -97,9 +134,7 @@ export const getWaterRecordByIdController = (
     req: Request,
     res: Response
 ): void => {
-    const id = Number(req.params.id);
-
-    if (!Number.isInteger(id) || id < 1) {
+    if (!isValidId(req.params.id)) {
         res.status(400).json({
             success: false,
             message: "Invalid water record ID."
@@ -107,7 +142,7 @@ export const getWaterRecordByIdController = (
         return;
     }
 
-    const record = getWaterRecordById(id);
+    const record = getWaterRecordById(Number(req.params.id));
 
     if (!record) {
         res.status(404).json({
@@ -128,9 +163,7 @@ export const updateWaterRecordController = (
     req: Request,
     res: Response
 ): void => {
-    const id = Number(req.params.id);
-
-    if (!Number.isInteger(id) || id < 1) {
+    if (!isValidId(req.params.id)) {
         res.status(400).json({
             success: false,
             message: "Invalid water record ID."
@@ -138,7 +171,7 @@ export const updateWaterRecordController = (
         return;
     }
 
-    if (!req.body || !isValidWaterInput(req.body)) {
+    if (!isValidWaterInput(req.body)) {
         res.status(400).json({
             success: false,
             message: "Please enter valid water details."
@@ -153,7 +186,7 @@ export const updateWaterRecordController = (
         notes = ""
     } = req.body;
 
-    const record = updateWaterRecord(id, {
+    const record = updateWaterRecord(Number(req.params.id), {
         offeredMl: Number(offeredMl),
         consumedMl: measured ? Number(consumedMl) : null,
         measured,
@@ -180,9 +213,7 @@ export const deleteWaterRecordController = (
     req: Request,
     res: Response
 ): void => {
-    const id = Number(req.params.id);
-
-    if (!Number.isInteger(id) || id < 1) {
+    if (!isValidId(req.params.id)) {
         res.status(400).json({
             success: false,
             message: "Invalid water record ID."
@@ -190,7 +221,7 @@ export const deleteWaterRecordController = (
         return;
     }
 
-    const deleted = deleteWaterRecord(id);
+    const deleted = deleteWaterRecord(Number(req.params.id));
 
     if (!deleted) {
         res.status(404).json({

@@ -1,200 +1,345 @@
 
-const API_URL = "https://catcare-api-ts.onrender.com";
+/* ==========================================
+   CATCARE - FRONTEND APPLICATION
+   HTML + CSS + JavaScript + Express API
+========================================== */
 
+// Empty URL means use the same server as the webpage.
+const API_URL = "";
+
+// Store application data
 let catProfile = null;
 let feedingRecords = [];
 let waterRecords = [];
 
+// DOM helper
 const $ = (id) => document.getElementById(id);
 
-function getLocalDate() {
-    const date = new Date();
-    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-    return date.toISOString().slice(0, 10);
-}
+
+// ==========================================
+// 1. API CONNECTION
+// ==========================================
 
 async function apiRequest(endpoint, options = {}) {
     const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers: {
-            "Content-Type": "application/json",
+            ...(options.body ? { "Content-Type": "application/json" } : {}),
             ...options.headers
         }
     });
 
     const result = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-        throw new Error(result.message || `HTTP error ${response.status}`);
+    if (!response.ok || result.success === false) {
+        throw new Error(result.message || `Request failed: ${response.status}`);
     }
 
     return result;
 }
 
-function showMessage(message) {
+
+// ==========================================
+// 2. MESSAGE DISPLAY
+// ==========================================
+
+function showMessage(message, type = "success") {
     const element = $("message");
+
+    if (!element) {
+        alert(message);
+        return;
+    }
+
     element.textContent = message;
-    element.classList.add("show");
+    element.className = `message ${type}`;
+    element.style.display = "block";
 
-    setTimeout(() => element.classList.remove("show"), 3000);
+    window.setTimeout(() => {
+        element.style.display = "none";
+    }, 4000);
 }
 
-function showError(error) {
-    console.error(error);
-    showMessage(error.message || "Something went wrong.");
-}
 
-function escapeHTML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, character => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-    })[character]);
-}
+// ==========================================
+// 3. NAVIGATION
+// ==========================================
 
-function formatDate(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    return Number.isNaN(date.getTime())
-        ? "-"
-        : date.toLocaleString();
-}
-
-// NAVIGATION
-
-function showPage(page) {
-    document.querySelectorAll(".page").forEach(section => {
-        section.classList.remove("active-page");
+function showPage(pageName) {
+    document.querySelectorAll(".page").forEach(page => {
+        page.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".nav-link").forEach(button => {
-        button.classList.remove("active");
+    const selectedPage = $(`${pageName}-page`);
+
+    if (selectedPage) {
+        selectedPage.classList.add("active-page");
+    }
+
+    document.querySelectorAll(".nav-link").forEach(link => {
+        link.classList.toggle(
+            "active",
+            link.dataset.page === pageName
+        );
     });
 
-    $(page).classList.add("active-page");
+    const pageNameElement = $("page-name");
 
-    document.querySelector(
-        `.nav-link[data-page="${page}"]`
-    ).classList.add("active");
+    if (pageNameElement) {
+        pageNameElement.textContent =
+            pageName.charAt(0).toUpperCase() + pageName.slice(1);
+    }
 
-    $("page-name").textContent =
-        page.charAt(0).toUpperCase() + page.slice(1);
+    if (pageName === "dashboard") {
+        refreshApp();
+    }
+
+    if (pageName === "profile") {
+        loadCat();
+    }
+
+    if (pageName === "feeding") {
+        loadFeeding();
+    }
+
+    if (pageName === "water") {
+        loadWater();
+    }
+
+    if (pageName === "wellness") {
+        loadWellness();
+    }
 }
 
-document.querySelectorAll(".nav-link").forEach(button => {
-    button.addEventListener("click", () => {
-        showPage(button.dataset.page);
+document.querySelectorAll(".nav-link").forEach(link => {
+    link.addEventListener("click", () => {
+        showPage(link.dataset.page);
     });
 });
 
-// LOAD CAT PROFILE
+
+// ==========================================
+// 4. CAT PROFILE
+// ==========================================
 
 async function loadCat() {
-    const result = await apiRequest("/api/cat");
+    try {
+        const result = await apiRequest("/api/cat");
 
-    // Your current TypeScript controller returns { success, data }
-    catProfile = result.data;
+        catProfile = result.data || result.cat || result;
 
-    if (!catProfile) {
-        throw new Error("Cat profile was not returned by the API.");
+        if (!catProfile) {
+            throw new Error("Cat profile not found.");
+        }
+
+        displayCatProfile();
+
+        return catProfile;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
+}
+
+
+function displayCatProfile() {
+    if (!catProfile) return;
+
+    if ($("profile-name")) {
+        $("profile-name").textContent = catProfile.name;
     }
 
-    $("profile-name").textContent = catProfile.name;
-    $("profile-age").textContent = catProfile.age;
-    $("profile-weight").textContent = catProfile.weightKg;
+    if ($("profile-age")) {
+        $("profile-age").textContent = catProfile.age;
+    }
 
-    $("cat-name").value = catProfile.name;
-    $("cat-age").value = catProfile.age;
-    $("cat-weight").value = catProfile.weightKg;
-    $("cat-food").value = catProfile.favoriteFood;
-    $("cat-activity").value = catProfile.activity;
+    if ($("profile-weight")) {
+        $("profile-weight").textContent =
+            `${catProfile.weightKg} kg`;
+    }
 
-    $("stat-weight").textContent = `${catProfile.weightKg} kg`;
+    if ($("cat-name")) {
+        $("cat-name").value = catProfile.name || "";
+    }
+
+    if ($("cat-age")) {
+        $("cat-age").value = catProfile.age ?? "";
+    }
+
+    if ($("cat-weight")) {
+        $("cat-weight").value = catProfile.weightKg ?? "";
+    }
+
+    if ($("cat-food")) {
+        $("cat-food").value = catProfile.favoriteFood || "";
+    }
+
+    if ($("cat-activity")) {
+        $("cat-activity").value = catProfile.activity || "";
+    }
+
+    if ($("stat-weight")) {
+        $("stat-weight").textContent =
+            `${catProfile.weightKg} kg`;
+    }
 }
 
-// LOAD FEEDING RECORDS
+
+// Update cat profile
+if ($("profile-form")) {
+    $("profile-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const input = {
+            name: $("cat-name").value.trim(),
+            age: Number($("cat-age").value),
+            weightKg: Number($("cat-weight").value),
+            favoriteFood: $("cat-food").value.trim(),
+            activity: $("cat-activity").value.trim()
+        };
+
+        if (!input.name || input.age < 0 || input.weightKg <= 0) {
+            showMessage("Please enter valid cat information.", "error");
+            return;
+        }
+
+        try {
+            await apiRequest("/api/cat", {
+                method: "PATCH",
+                body: JSON.stringify(input)
+            });
+
+            await loadCat();
+
+            showMessage("Cat profile updated successfully!");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// ==========================================
+// 5. FEEDING TRACKER
+// ==========================================
 
 async function loadFeeding() {
-    const result = await apiRequest("/api/feeding");
+    try {
+        const result = await apiRequest("/api/feeding");
 
-    feedingRecords = result.records || [];
+        feedingRecords = result.records || result.data || [];
 
-    renderFeeding();
+        renderFeeding();
+        updateDashboard();
+
+        return feedingRecords;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
 }
+
 
 function renderFeeding() {
     const table = $("feeding-table");
 
-    if (!feedingRecords.length) {
+    if (!table) return;
+
+    table.innerHTML = "";
+
+    if (feedingRecords.length === 0) {
         table.innerHTML = `
             <tr>
-                <td colspan="6">No feeding records found.</td>
-            </tr>`;
-    } else {
-        table.innerHTML = feedingRecords.map(record => `
-            <tr>
-                <td>${escapeHTML(record.foodName)}</td>
-                <td>${record.quantityGrams} g</td>
-                <td>${escapeHTML(record.mealTime)}</td>
-                <td>${formatDate(record.createdAt)}</td>
-                <td>${escapeHTML(record.notes || "-")}</td>
-                <td>
-                    <button onclick="editFeeding(${record.id})">Edit</button>
-                    <button onclick="deleteFeeding(${record.id})">Delete</button>
-                </td>
+                <td colspan="5">No feeding records found.</td>
             </tr>
-        `).join("");
+        `;
+        return;
     }
 
-    $("recent-feeding").innerHTML = feedingRecords.length
-        ? feedingRecords.slice(0, 5).map(record => `
-            <p class="recent-record">
-                ${escapeHTML(record.foodName)}
-                <strong>${record.quantityGrams} g</strong>
-            </p>
-        `).join("")
-        : `<p>No feeding records yet.</p>`;
-}
+    feedingRecords.forEach(record => {
+        const row = document.createElement("tr");
 
-// ADD FEEDING RECORD
+        const values = [
+            record.foodName,
+            `${record.quantityGrams} g`,
+            record.mealTime,
+            record.notes || ""
+        ];
 
-$("feeding-form").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const form = new FormData(event.currentTarget);
-
-    const data = {
-        foodName: String(form.get("foodName")).trim(),
-        quantityGrams: Number(form.get("quantityGrams")),
-        mealTime: String(form.get("mealTime")),
-        notes: String(form.get("notes") || "")
-    };
-
-    try {
-        await apiRequest("/api/feeding", {
-            method: "POST",
-            body: JSON.stringify(data)
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value ?? "";
+            row.appendChild(cell);
         });
 
-        closeModal("feeding-modal");
-        event.currentTarget.reset();
+        const actions = document.createElement("td");
 
-        await refreshApp();
-        showMessage("Feeding record saved successfully!");
+        const editButton = document.createElement("button");
+        editButton.textContent = "Edit";
+        editButton.type = "button";
+        editButton.addEventListener("click", () => editFeeding(record.id));
 
-    } catch (error) {
-        showError(error);
-    }
-});
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.type = "button";
+        deleteButton.addEventListener("click", () => deleteFeeding(record.id));
 
-// EDIT FEEDING RECORD
+        actions.append(editButton, deleteButton);
+        row.appendChild(actions);
 
+        table.appendChild(row);
+    });
+}
+
+
+// Add feeding record
+if ($("feeding-form")) {
+    $("feeding-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const form = event.currentTarget;
+
+        const input = {
+            foodName: form.elements.foodName.value.trim(),
+            quantityGrams: Number(form.elements.quantityGrams.value),
+            mealTime: form.elements.mealTime.value,
+            notes: form.elements.notes.value.trim()
+        };
+
+        if (
+            !input.foodName ||
+            !Number.isFinite(input.quantityGrams) ||
+            input.quantityGrams <= 0 ||
+            !input.mealTime
+        ) {
+            showMessage("Please enter valid feeding information.", "error");
+            return;
+        }
+
+        try {
+            await apiRequest("/api/feeding", {
+                method: "POST",
+                body: JSON.stringify(input)
+            });
+
+            form.reset();
+
+            closeModal("feeding-modal");
+
+            await loadFeeding();
+
+            showMessage("Feeding record saved successfully!");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// Edit feeding record
 async function editFeeding(id) {
     const record = feedingRecords.find(item => item.id === id);
+
     if (!record) return;
 
     const foodName = prompt("Food name:", record.foodName);
@@ -209,358 +354,496 @@ async function editFeeding(id) {
     const notes = prompt("Notes:", record.notes || "");
     if (notes === null) return;
 
+    const input = {
+        foodName: foodName.trim(),
+        quantityGrams: Number(quantity),
+        mealTime: mealTime.trim(),
+        notes: notes.trim()
+    };
+
     if (
-        !foodName.trim() ||
-        !mealTime.trim() ||
-        !Number.isFinite(Number(quantity)) ||
-        Number(quantity) <= 0
+        !input.foodName ||
+        !Number.isFinite(input.quantityGrams) ||
+        input.quantityGrams <= 0 ||
+        !input.mealTime
     ) {
-        showMessage("Please enter valid feeding details.");
+        showMessage("Invalid feeding information.", "error");
         return;
     }
 
     try {
         await apiRequest(`/api/feeding/${id}`, {
             method: "PATCH",
-            body: JSON.stringify({
-                foodName: foodName.trim(),
-                quantityGrams: Number(quantity),
-                mealTime: mealTime.trim(),
-                notes
-            })
+            body: JSON.stringify(input)
         });
 
-        await refreshApp();
-        showMessage("Feeding record updated!");
+        await loadFeeding();
 
+        showMessage("Feeding record updated!");
     } catch (error) {
-        showError(error);
+        showMessage(error.message, "error");
     }
 }
 
-// DELETE FEEDING RECORD
 
+// Delete feeding record
 async function deleteFeeding(id) {
-    if (!confirm("Delete this feeding record?")) return;
+    if (!confirm("Are you sure you want to delete this feeding record?")) {
+        return;
+    }
 
     try {
         await apiRequest(`/api/feeding/${id}`, {
             method: "DELETE"
         });
 
-        await refreshApp();
-        showMessage("Feeding record deleted!");
+        await loadFeeding();
 
+        showMessage("Feeding record deleted!");
     } catch (error) {
-        showError(error);
+        showMessage(error.message, "error");
     }
 }
 
-// LOAD WATER RECORDS
+
+// ==========================================
+// 6. WATER TRACKER
+// ==========================================
 
 async function loadWater() {
-    const result = await apiRequest("/api/water");
+    try {
+        const result = await apiRequest("/api/water");
 
-    waterRecords = result.records || [];
+        waterRecords = result.records || result.data || [];
 
-    renderWater();
+        renderWater();
+        updateDashboard();
+
+        return waterRecords;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
 }
+
 
 function renderWater() {
     const table = $("water-table");
 
-    if (!waterRecords.length) {
+    if (!table) return;
+
+    table.innerHTML = "";
+
+    if (waterRecords.length === 0) {
         table.innerHTML = `
             <tr>
-                <td colspan="6">No water records found.</td>
-            </tr>`;
-    } else {
-        table.innerHTML = waterRecords.map(record => `
-            <tr>
-                <td>${record.offeredMl} ml</td>
-                <td>${record.measured ? `${record.consumedMl} ml` : "Not measured"}</td>
-                <td>${record.measured ? "Yes" : "No"}</td>
-                <td>${formatDate(record.createdAt)}</td>
-                <td>${escapeHTML(record.notes || "-")}</td>
-                <td>
-                    <button onclick="editWater(${record.id})">Edit</button>
-                    <button onclick="deleteWater(${record.id})">Delete</button>
-                </td>
+                <td colspan="5">No water records found.</td>
             </tr>
-        `).join("");
-    }
-
-    const offered = waterRecords.reduce(
-        (sum, record) => sum + Number(record.offeredMl), 0
-    );
-
-    const consumed = waterRecords.reduce(
-        (sum, record) => sum +
-            (record.measured ? Number(record.consumedMl || 0) : 0), 0
-    );
-
-    $("water-total-offered").textContent = `${offered} ml`;
-    $("water-total-consumed").textContent = `${consumed} ml`;
-}
-
-// ADD WATER RECORD
-
-$("measured-select").addEventListener("change", event => {
-    const measured = event.target.value === "true";
-
-    $("consumed-input").disabled = !measured;
-    $("consumed-input").required = measured;
-
-    if (!measured) {
-        $("consumed-input").value = "";
-    }
-});
-
-$("water-form").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const form = new FormData(event.currentTarget);
-    const measured = form.get("measured") === "true";
-
-    const data = {
-        offeredMl: Number(form.get("offeredMl")),
-        consumedMl: measured ? Number(form.get("consumedMl")) : null,
-        measured,
-        notes: String(form.get("notes") || "")
-    };
-
-    if (
-        measured &&
-        (!Number.isFinite(data.consumedMl) || data.consumedMl < 0)
-    ) {
-        showMessage("Enter a valid consumed water amount.");
+        `;
         return;
     }
 
-    try {
-        await apiRequest("/api/water", {
-            method: "POST",
-            body: JSON.stringify(data)
+    waterRecords.forEach(record => {
+        const row = document.createElement("tr");
+
+        const values = [
+            `${record.offeredMl} ml`,
+            record.measured ? `${record.consumedMl} ml` : "Not measured",
+            record.measured ? "Yes" : "No",
+            record.notes || ""
+        ];
+
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value ?? "";
+            row.appendChild(cell);
         });
 
-        closeModal("water-modal");
-        event.currentTarget.reset();
+        const actions = document.createElement("td");
 
-        $("consumed-input").disabled = false;
-        $("consumed-input").required = true;
+        const editButton = document.createElement("button");
+        editButton.textContent = "Edit";
+        editButton.type = "button";
+        editButton.addEventListener("click", () => editWater(record.id));
 
-        await refreshApp();
-        showMessage("Water record saved!");
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.type = "button";
+        deleteButton.addEventListener("click", () => deleteWater(record.id));
 
-    } catch (error) {
-        showError(error);
+        actions.append(editButton, deleteButton);
+        row.appendChild(actions);
+
+        table.appendChild(row);
+    });
+
+    const totalOffered = waterRecords.reduce(
+        (sum, record) => sum + Number(record.offeredMl || 0), 0
+    );
+
+    const totalConsumed = waterRecords.reduce(
+        (sum, record) =>
+            sum + (record.measured ? Number(record.consumedMl || 0) : 0),
+        0
+    );
+
+    if ($("water-total-offered")) {
+        $("water-total-offered").textContent = `${totalOffered} ml`;
     }
-});
 
-// EDIT WATER RECORD
+    if ($("water-total-consumed")) {
+        $("water-total-consumed").textContent = `${totalConsumed} ml`;
+    }
+}
 
+
+// Add water record
+if ($("water-form")) {
+    $("water-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const form = event.currentTarget;
+
+        const measured = form.elements.measured.value === "true";
+
+        const input = {
+            offeredMl: Number(form.elements.offeredMl.value),
+            measured,
+            consumedMl: measured
+                ? Number(form.elements.consumedMl.value)
+                : null,
+            notes: form.elements.notes.value.trim()
+        };
+
+        if (
+            !Number.isFinite(input.offeredMl) ||
+            input.offeredMl < 0 ||
+            (
+                measured &&
+                (!Number.isFinite(input.consumedMl) ||
+                 input.consumedMl < 0)
+            )
+        ) {
+            showMessage("Please enter valid water information.", "error");
+            return;
+        }
+
+        try {
+            await apiRequest("/api/water", {
+                method: "POST",
+                body: JSON.stringify(input)
+            });
+
+            form.reset();
+
+            closeModal("water-modal");
+
+            await loadWater();
+
+            showMessage("Water record saved successfully!");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// Edit water record
 async function editWater(id) {
     const record = waterRecords.find(item => item.id === id);
+
     if (!record) return;
 
     const offered = prompt("Water offered (ml):", record.offeredMl);
     if (offered === null) return;
 
-    const measuredAnswer = prompt(
-        "Was consumption measured? Enter yes or no:",
-        record.measured ? "yes" : "no"
-    );
+    const measured = confirm("Do you have a measured consumption value?");
 
-    if (measuredAnswer === null) return;
-
-    const answer = measuredAnswer.trim().toLowerCase();
-
-    if (answer !== "yes" && answer !== "no") {
-        showMessage("Please enter yes or no.");
-        return;
-    }
-
-    const measured = answer === "yes";
     let consumed = null;
 
     if (measured) {
-        const value = prompt(
+        consumed = prompt(
             "Water consumed (ml):",
             record.consumedMl ?? ""
         );
 
-        if (value === null) return;
+        if (consumed === null) return;
 
-        consumed = Number(value);
-
-        if (!Number.isFinite(consumed) || consumed < 0) {
-            showMessage("Enter a valid consumed amount.");
-            return;
-        }
+        consumed = Number(consumed);
     }
 
     const notes = prompt("Notes:", record.notes || "");
     if (notes === null) return;
 
-    if (!Number.isFinite(Number(offered)) || Number(offered) < 0) {
-        showMessage("Enter a valid offered amount.");
+    const input = {
+        offeredMl: Number(offered),
+        measured,
+        consumedMl: measured ? consumed : null,
+        notes: notes.trim()
+    };
+
+    if (
+        !Number.isFinite(input.offeredMl) ||
+        input.offeredMl < 0 ||
+        (measured && (!Number.isFinite(consumed) || consumed < 0))
+    ) {
+        showMessage("Invalid water information.", "error");
         return;
     }
 
     try {
         await apiRequest(`/api/water/${id}`, {
             method: "PATCH",
-            body: JSON.stringify({
-                offeredMl: Number(offered),
-                consumedMl: consumed,
-                measured,
-                notes
-            })
+            body: JSON.stringify(input)
         });
 
-        await refreshApp();
-        showMessage("Water record updated!");
+        await loadWater();
 
+        showMessage("Water record updated!");
     } catch (error) {
-        showError(error);
+        showMessage(error.message, "error");
     }
 }
 
-// DELETE WATER RECORD
 
+// Delete water record
 async function deleteWater(id) {
-    if (!confirm("Delete this water record?")) return;
+    if (!confirm("Are you sure you want to delete this water record?")) {
+        return;
+    }
 
     try {
         await apiRequest(`/api/water/${id}`, {
             method: "DELETE"
         });
 
-        await refreshApp();
-        showMessage("Water record deleted!");
+        await loadWater();
 
+        showMessage("Water record deleted!");
     } catch (error) {
-        showError(error);
+        showMessage(error.message, "error");
     }
 }
 
-// DASHBOARD
 
-async function updateDashboard() {
-    const selectedDate = $("dashboard-date").value || getLocalDate();
+// ==========================================
+// 7. DASHBOARD
+// ==========================================
 
-    const feedings = feedingRecords.filter(record =>
-        record.createdAt?.slice(0, 10) === selectedDate
+function isToday(dateValue) {
+    if (!dateValue) return false;
+
+    const date = new Date(dateValue);
+
+    const today = new Date();
+
+    return (
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate()
     );
-
-    const waters = waterRecords.filter(record =>
-        record.createdAt?.slice(0, 10) === selectedDate
-    );
-
-    const foodTotal = feedings.reduce(
-        (sum, record) => sum + Number(record.quantityGrams), 0
-    );
-
-    const offeredTotal = waters.reduce(
-        (sum, record) => sum + Number(record.offeredMl), 0
-    );
-
-    const consumedTotal = waters.reduce(
-        (sum, record) => sum +
-            (record.measured ? Number(record.consumedMl || 0) : 0), 0
-    );
-
-    $("stat-food").textContent = `${foodTotal} g`;
-    $("stat-water").textContent = `${offeredTotal} ml`;
-    $("stat-consumed").textContent = `${consumedTotal} ml`;
-
-    $("stat-feeding-count").textContent =
-        `${feedings.length} feeding records`;
-
-    $("stat-water-count").textContent =
-        `${waters.length} water records`;
-
-    $("wellness-feeding").textContent = feedings.length;
-    $("wellness-water").textContent = waters.length;
-    $("wellness-food").textContent = `${foodTotal} g`;
-    $("wellness-offered").textContent = `${offeredTotal} ml`;
 }
 
-// WELLNESS REPORT
 
-async function loadWellness() {
-    const date = $("wellness-date").value;
+function updateDashboard() {
+    const todayFeeding = feedingRecords.filter(
+        record => isToday(record.createdAt)
+    );
 
-    if (!date) {
-        showMessage("Please select a date.");
+    const todayWater = waterRecords.filter(
+        record => isToday(record.createdAt)
+    );
+
+    const foodTotal = todayFeeding.reduce(
+        (sum, record) => sum + Number(record.quantityGrams || 0),
+        0
+    );
+
+    const waterOffered = todayWater.reduce(
+        (sum, record) => sum + Number(record.offeredMl || 0),
+        0
+    );
+
+    const waterConsumed = todayWater.reduce(
+        (sum, record) =>
+            sum + (record.measured ? Number(record.consumedMl || 0) : 0),
+        0
+    );
+
+    if ($("stat-food")) {
+        $("stat-food").textContent = `${foodTotal} g`;
+    }
+
+    if ($("stat-feeding-count")) {
+        $("stat-feeding-count").textContent = todayFeeding.length;
+    }
+
+    if ($("stat-water")) {
+        $("stat-water").textContent = `${waterOffered} ml`;
+    }
+
+    if ($("stat-water-count")) {
+        $("stat-water-count").textContent = todayWater.length;
+    }
+
+    if ($("stat-consumed")) {
+        $("stat-consumed").textContent = `${waterConsumed} ml`;
+    }
+
+    if (catProfile && $("stat-weight")) {
+        $("stat-weight").textContent = `${catProfile.weightKg} kg`;
+    }
+
+    if ($("dashboard-date")) {
+        $("dashboard-date").textContent =
+            new Date().toLocaleDateString();
+    }
+
+    renderRecentFeeding(todayFeeding);
+}
+
+
+function renderRecentFeeding(records) {
+    const container = $("recent-feeding");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (records.length === 0) {
+        container.textContent = "No feeding activity recorded today.";
         return;
     }
+
+    records.slice(-5).reverse().forEach(record => {
+        const item = document.createElement("p");
+
+        item.textContent =
+            `${record.foodName} — ${record.quantityGrams} g (${record.mealTime})`;
+
+        container.appendChild(item);
+    });
+}
+
+
+// ==========================================
+// 8. WELLNESS REPORT
+// ==========================================
+
+async function loadWellness() {
+    const date = $("wellness-date")?.value ||
+        new Date().toISOString().slice(0, 10);
 
     try {
         const result = await apiRequest(
             `/api/wellness/daily?date=${encodeURIComponent(date)}`
         );
 
-        const report = result;
+        const report = result.data || result;
 
-        $("wellness-report").innerHTML = `
-            <div class="report-card">
-                <p>Cat Name</p>
-                <h2>${escapeHTML(report.cat.name)}</h2>
-            </div>
+        renderWellness(report);
 
-            <div class="report-card">
-                <p>Cat Weight</p>
-                <h2>${report.cat.weightKg} kg</h2>
-            </div>
-
-            <div class="report-card">
-                <p>Feeding Records</p>
-                <h2>${report.feeding.totalRecords}</h2>
-            </div>
-
-            <div class="report-card">
-                <p>Total Food</p>
-                <h2>${report.feeding.totalGrams} g</h2>
-            </div>
-
-            <div class="report-card">
-                <p>Water Records</p>
-                <h2>${report.water.totalRecords}</h2>
-            </div>
-
-            <div class="report-card">
-                <p>Water Offered</p>
-                <h2>${report.water.totalOfferedMl} ml</h2>
-            </div>
-
-            <div class="report-card">
-                <p>Measured Water Consumption</p>
-                <h2>${report.water.totalMeasuredConsumedMl} ml</h2>
-            </div>
-        `;
-
-        showMessage("Wellness report generated!");
-
+        return report;
     } catch (error) {
-        showError(error);
+        showMessage(error.message, "error");
+        throw error;
     }
 }
 
-// MODALS
+
+function renderWellness(report) {
+    const container = $("wellness-report");
+
+    if (!container) return;
+
+    if (!report) {
+        container.textContent = "No wellness report available.";
+        return;
+    }
+
+    const feeding = report.feeding || {};
+    const water = report.water || {};
+    const cat = report.cat || {};
+
+    container.innerHTML = "";
+
+    const details = [
+        ["Date", report.date || ""],
+        ["Cat", cat.name || "Not available"],
+        ["Food records", feeding.totalRecords ?? 0],
+        ["Total food", `${feeding.totalGrams ?? 0} g`],
+        ["Water records", water.totalRecords ?? 0],
+        ["Water offered", `${water.totalOfferedMl ?? 0} ml`],
+        [
+            "Measured water consumed",
+            `${water.totalMeasuredConsumedMl ?? 0} ml`
+        ]
+    ];
+
+    details.forEach(([label, value]) => {
+        const item = document.createElement("p");
+
+        const strong = document.createElement("strong");
+        strong.textContent = `${label}: `;
+
+        item.append(strong, document.createTextNode(String(value)));
+
+        container.appendChild(item);
+    });
+}
+
+
+if ($("wellness-date")) {
+    $("wellness-date").addEventListener("change", loadWellness);
+}
+
+
+// ==========================================
+// 9. MODAL HELPERS
+// ==========================================
 
 function openModal(id) {
-    $(id).classList.add("show");
+    const modal = $(id);
+
+    if (modal) {
+        modal.style.display = "flex";
+    }
 }
+
 
 function closeModal(id) {
-    $(id).classList.remove("show");
+    const modal = $(id);
+
+    if (modal) {
+        modal.style.display = "none";
+    }
 }
 
-// REFRESH ALL DATA
+
+// Connect buttons with modal IDs
+document.querySelectorAll("[data-open-modal]").forEach(button => {
+    button.addEventListener("click", () => {
+        openModal(button.dataset.openModal);
+    });
+});
+
+document.querySelectorAll("[data-close-modal]").forEach(button => {
+    button.addEventListener("click", () => {
+        closeModal(button.dataset.closeModal);
+    });
+});
+
+
+// ==========================================
+// 10. REFRESH APPLICATION
+// ==========================================
 
 async function refreshApp() {
-    $("connection-status").textContent = "Connecting...";
+    const status = $("connection-status");
+
+    if (status) {
+        status.textContent = "Connecting...";
+    }
 
     try {
         await Promise.all([
@@ -569,23 +852,40 @@ async function refreshApp() {
             loadWater()
         ]);
 
-        await updateDashboard();
+        updateDashboard();
 
-        $("connection-status").textContent = "● API Connected";
-
+        if (status) {
+            status.textContent = "Connected";
+        }
     } catch (error) {
-        $("connection-status").textContent = "● Connection Error";
-        showError(error);
+        if (status) {
+            status.textContent = "Connection error";
+        }
+
+        console.error("CatCare loading error:", error);
     }
 }
 
-// INITIALIZE
 
-$("dashboard-date").value = getLocalDate();
-$("wellness-date").value = getLocalDate();
+if ($("refresh-btn")) {
+    $("refresh-btn").addEventListener("click", refreshApp);
+}
 
-$("dashboard-date").addEventListener("change", updateDashboard);
 
-$("refresh-btn").addEventListener("click", refreshApp);
+// ==========================================
+// 11. START APPLICATION
+// ==========================================
 
-refreshApp();
+document.addEventListener("DOMContentLoaded", async () => {
+    if ($("dashboard-date")) {
+        $("dashboard-date").textContent =
+            new Date().toLocaleDateString();
+    }
+
+    if ($("wellness-date")) {
+        $("wellness-date").value =
+            new Date().toISOString().slice(0, 10);
+    }
+
+    await refreshApp();
+});

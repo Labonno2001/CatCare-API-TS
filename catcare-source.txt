@@ -1,0 +1,2834 @@
+﻿
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\server.ts ==========
+
+
+import express, { Response } from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import path from "node:path";
+
+import db from "./database/database";
+
+import catRoutes from "./routes/cat.routes";
+import feedingRoutes from "./routes/feeding.routes";
+import waterRoutes from "./routes/water.routes";
+import wellnessRoutes from "./routes/wellness.routes";
+
+import { errorHandler } from "./middleware/error.middleware";
+
+dotenv.config();
+
+const app = express();
+
+// Global middleware
+app.use(cors());
+app.use(express.json());
+
+// API routes
+app.use("/api/cat", catRoutes);
+app.use("/api/feeding", feedingRoutes);
+app.use("/api/water", waterRoutes);
+app.use("/api/wellness", wellnessRoutes);
+
+// Serve frontend files from the public folder
+const publicPath = path.join(process.cwd(), "public");
+
+app.use(express.static(publicPath));
+
+// Root route - serves index.html
+app.get("/", (_req, res) => {
+    res.sendFile(path.join(publicPath, "index.html"));
+});
+
+// Health check
+app.get("/api/health", (_req, res: Response) => {
+    res.status(200).json({
+        success: true,
+        message: "CatCare API is running",
+        database: db.open,
+        timestamp: new Date()
+    });
+});
+
+// Handle unknown routes
+app.use((_req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "Route not found."
+    });
+});
+
+// Centralized error handler - must be last
+app.use(errorHandler);
+
+// Server configuration
+const PORT = process.env.PORT || 3000;
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`CatCare API running on port ${PORT}`);
+});
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\controllers\cat.controller.ts ==========
+
+
+import { Request, Response } from "express";
+
+import {
+    getCatProfile,
+    updateCatProfile,
+    UpdateCatProfileInput
+} from "../services/cat.service";
+
+// Validate partial cat profile updates
+const isValidCatProfileInput = (
+    body: unknown
+): body is UpdateCatProfileInput => {
+    if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body)
+    ) {
+        return false;
+    }
+
+    const input = body as Record<string, unknown>;
+
+    const allowedFields = [
+        "name",
+        "age",
+        "weightKg",
+        "favoriteFood",
+        "activity"
+    ];
+
+    const keys = Object.keys(input);
+
+    if (
+        keys.length === 0 ||
+        keys.some((key) => !allowedFields.includes(key))
+    ) {
+        return false;
+    }
+
+    if (
+        input.name !== undefined &&
+        (typeof input.name !== "string" || !input.name.trim())
+    ) {
+        return false;
+    }
+
+    if (
+        input.age !== undefined &&
+        (
+            typeof input.age !== "number" ||
+            !Number.isFinite(input.age) ||
+            input.age < 0
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        input.weightKg !== undefined &&
+        (
+            typeof input.weightKg !== "number" ||
+            !Number.isFinite(input.weightKg) ||
+            input.weightKg <= 0
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        input.favoriteFood !== undefined &&
+        (
+            typeof input.favoriteFood !== "string" ||
+            !input.favoriteFood.trim()
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        input.activity !== undefined &&
+        (
+            typeof input.activity !== "string" ||
+            !input.activity.trim()
+        )
+    ) {
+        return false;
+    }
+
+    return true;
+};
+
+// GET cat profile
+export const getCatProfileController = (
+    _req: Request,
+    res: Response
+): void => {
+    const cat = getCatProfile();
+
+    if (!cat) {
+        res.status(404).json({
+            success: false,
+            message: "Cat profile not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: `Here is ${cat.name}'s wellness profile! ðŸ¾`,
+        cat
+    });
+};
+
+// PATCH cat profile
+export const updateCatProfileController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidCatProfileInput(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "Please enter valid cat profile details."
+        });
+        return;
+    }
+
+    const cat = updateCatProfile(req.body);
+
+    if (!cat) {
+        res.status(404).json({
+            success: false,
+            message: "Cat profile not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Cat profile updated successfully!",
+        cat
+    });
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\controllers\feeding.controller.ts ==========
+
+
+import { Request, Response } from "express";
+
+import {
+    getAllFeedingRecords,
+    createFeedingRecord,
+    getFeedingSummary,
+    getFeedingRecordById,
+    updateFeedingRecord,
+    deleteFeedingRecord
+} from "../services/feeding.service";
+
+// Define the accepted request body structure
+interface FeedingInputBody {
+    foodName: string;
+    quantityGrams: number | string;
+    mealTime: string;
+    notes?: string;
+}
+
+// Safely check whether an unknown value is a valid feeding request
+const isValidFeedingInput = (body: unknown): body is FeedingInputBody => {
+    if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body)
+    ) {
+        return false;
+    }
+
+    const input = body as Record<string, unknown>;
+
+    const validQuantity =
+        (typeof input.quantityGrams === "number" ||
+            typeof input.quantityGrams === "string") &&
+        Number.isFinite(Number(input.quantityGrams)) &&
+        Number(input.quantityGrams) > 0;
+
+    return (
+        typeof input.foodName === "string" &&
+        input.foodName.trim().length > 0 &&
+        validQuantity &&
+        typeof input.mealTime === "string" &&
+        input.mealTime.trim().length > 0 &&
+        (input.notes === undefined || typeof input.notes === "string")
+    );
+};
+
+const isValidId = (id: string | string[]): boolean => {
+    if (typeof id !== "string") {
+        return false;
+    }
+
+    const numericId = Number(id);
+
+    return Number.isInteger(numericId) && numericId > 0;
+};
+// 1. GET all feeding records
+export const getAllFeedingRecordsController = (
+    _req: Request,
+    res: Response
+): void => {
+    const records = getAllFeedingRecords();
+
+    res.status(200).json({
+        success: true,
+        count: records.length,
+        records
+    });
+};
+
+// 2. POST a feeding record
+export const createFeedingRecordController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidFeedingInput(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "Please enter valid feeding details."
+        });
+        return;
+    }
+
+    const { foodName, quantityGrams, mealTime, notes = "" } = req.body;
+
+    const record = createFeedingRecord({
+        foodName,
+        quantityGrams: Number(quantityGrams),
+        mealTime,
+        notes
+    });
+
+    res.status(201).json({
+        success: true,
+        message: "Feeding record saved!",
+        record
+    });
+};
+
+// 3. GET feeding summary
+export const getFeedingSummaryController = (
+    _req: Request,
+    res: Response
+): void => {
+    const summary = getFeedingSummary();
+
+    res.status(200).json({
+        success: true,
+        ...summary
+    });
+};
+
+// 4. GET one feeding record by ID
+export const getFeedingRecordByIdController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidId(req.params.id)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid feeding record ID."
+        });
+        return;
+    }
+
+    const record = getFeedingRecordById(Number(req.params.id));
+
+    if (!record) {
+        res.status(404).json({
+            success: false,
+            message: "Feeding record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        record
+    });
+};
+
+// 5. PATCH a feeding record
+export const updateFeedingRecordController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidId(req.params.id) || !isValidFeedingInput(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "Please enter valid feeding details."
+        });
+        return;
+    }
+
+    const { foodName, quantityGrams, mealTime, notes = "" } = req.body;
+
+    const record = updateFeedingRecord(Number(req.params.id), {
+        foodName,
+        quantityGrams: Number(quantityGrams),
+        mealTime,
+        notes
+    });
+
+    if (!record) {
+        res.status(404).json({
+            success: false,
+            message: "Feeding record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Feeding record updated!",
+        record
+    });
+};
+
+// 6. DELETE a feeding record
+export const deleteFeedingRecordController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidId(req.params.id)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid feeding record ID."
+        });
+        return;
+    }
+
+    const deleted = deleteFeedingRecord(Number(req.params.id));
+
+    if (!deleted) {
+        res.status(404).json({
+            success: false,
+            message: "Feeding record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Feeding record deleted!"
+    });
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\controllers\water.controller.ts ==========
+
+
+import { Request, Response } from "express";
+
+import {
+    getAllWaterRecords,
+    createWaterRecord,
+    getWaterSummary,
+    getWaterRecordById,
+    updateWaterRecord,
+    deleteWaterRecord
+} from "../services/water.service";
+
+// Define the accepted water request structure
+interface WaterInputBody {
+    offeredMl: number | string;
+    consumedMl?: number | string | null;
+    measured: boolean;
+    notes?: string;
+}
+
+// Safely validate an unknown request body
+const isValidWaterInput = (body: unknown): body is WaterInputBody => {
+    if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body)
+    ) {
+        return false;
+    }
+
+    const input = body as Record<string, unknown>;
+
+    const validOfferedMl =
+        (typeof input.offeredMl === "number" ||
+            typeof input.offeredMl === "string") &&
+        Number.isFinite(Number(input.offeredMl)) &&
+        Number(input.offeredMl) >= 0;
+
+    const validNotes =
+        input.notes === undefined ||
+        typeof input.notes === "string";
+
+    const validConsumedMl =
+        input.measured === false ||
+        (
+            (typeof input.consumedMl === "number" ||
+                typeof input.consumedMl === "string") &&
+            Number.isFinite(Number(input.consumedMl)) &&
+            Number(input.consumedMl) >= 0
+        );
+
+    return (
+        validOfferedMl &&
+        typeof input.measured === "boolean" &&
+        validNotes &&
+        validConsumedMl
+    );
+};
+
+// Validate record ID
+const isValidId = (id: string | string[]): boolean => {
+    if (typeof id !== "string") {
+        return false;
+    }
+
+    const numericId = Number(id);
+
+    return Number.isInteger(numericId) && numericId > 0;
+};
+
+// 1. GET all water records
+export const getAllWaterRecordsController = (
+    _req: Request,
+    res: Response
+): void => {
+    const records = getAllWaterRecords();
+
+    res.status(200).json({
+        success: true,
+        count: records.length,
+        records
+    });
+};
+
+// 2. Create a water record
+export const createWaterRecordController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidWaterInput(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "Please enter valid water details."
+        });
+        return;
+    }
+
+    const {
+        offeredMl,
+        consumedMl,
+        measured,
+        notes = ""
+    } = req.body;
+
+    const record = createWaterRecord({
+        offeredMl: Number(offeredMl),
+        consumedMl: measured ? Number(consumedMl) : null,
+        measured,
+        notes
+    });
+
+    res.status(201).json({
+        success: true,
+        message: "Water record saved!",
+        record
+    });
+};
+
+// 3. Get water records summary
+export const getWaterSummaryController = (
+    _req: Request,
+    res: Response
+): void => {
+    const summary = getWaterSummary();
+
+    res.status(200).json({
+        success: true,
+        ...summary
+    });
+};
+
+// 4. Get a water record by ID
+export const getWaterRecordByIdController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidId(req.params.id)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid water record ID."
+        });
+        return;
+    }
+
+    const record = getWaterRecordById(Number(req.params.id));
+
+    if (!record) {
+        res.status(404).json({
+            success: false,
+            message: "Water record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        record
+    });
+};
+
+// 5. Update a water record
+export const updateWaterRecordController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidId(req.params.id)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid water record ID."
+        });
+        return;
+    }
+
+    if (!isValidWaterInput(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "Please enter valid water details."
+        });
+        return;
+    }
+
+    const {
+        offeredMl,
+        consumedMl,
+        measured,
+        notes = ""
+    } = req.body;
+
+    const record = updateWaterRecord(Number(req.params.id), {
+        offeredMl: Number(offeredMl),
+        consumedMl: measured ? Number(consumedMl) : null,
+        measured,
+        notes
+    });
+
+    if (!record) {
+        res.status(404).json({
+            success: false,
+            message: "Water record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Water record updated!",
+        record
+    });
+};
+
+// 6. Delete a water record
+export const deleteWaterRecordController = (
+    req: Request,
+    res: Response
+): void => {
+    if (!isValidId(req.params.id)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid water record ID."
+        });
+        return;
+    }
+
+    const deleted = deleteWaterRecord(Number(req.params.id));
+
+    if (!deleted) {
+        res.status(404).json({
+            success: false,
+            message: "Water record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Water record deleted!"
+    });
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\controllers\wellness.controller.ts ==========
+
+
+import { Request, Response } from "express";
+import { getDailyWellness } from "../wellness/wellness.service";
+
+// Validate YYYY-MM-DD format and actual calendar date
+const isValidDate = (date: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return false;
+    }
+
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+
+    return (
+        !Number.isNaN(parsedDate.getTime()) &&
+        parsedDate.toISOString().slice(0, 10) === date
+    );
+};
+
+// GET daily wellness information
+export const getDailyWellnessController = (
+    req: Request,
+    res: Response
+): void => {
+    const date = req.query.date;
+
+    if (typeof date !== "string" || !isValidDate(date)) {
+        res.status(400).json({
+            success: false,
+            message: "Please provide a valid date in YYYY-MM-DD format."
+        });
+        return;
+    }
+
+    const wellness = getDailyWellness(date);
+
+    if (!wellness) {
+        res.status(404).json({
+            success: false,
+            message: "Cat profile not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        ...wellness
+    });
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\database\database.ts ==========
+
+
+import Database from "better-sqlite3";
+import path from "node:path";
+import { mkdirSync } from "node:fs";
+import dotenv from "dotenv";
+
+// Load environment variables before reading database configuration
+dotenv.config();
+
+// Use Render's persistent disk path in production.
+// Use the local data folder during development.
+const databasePath =
+    process.env.DATABASE_PATH ||
+    path.join(process.cwd(), "data", "catcare.db");
+
+// Ensure the database directory exists
+mkdirSync(path.dirname(databasePath), { recursive: true });
+
+// Connect to SQLite
+const db = new Database(databasePath);
+
+// Enable foreign key constraints
+db.pragma("foreign_keys = ON");
+
+// Create database tables if they do not already exist
+db.exec(`
+    CREATE TABLE IF NOT EXISTS feeding_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        food_name TEXT NOT NULL,
+        quantity_grams REAL NOT NULL CHECK (quantity_grams > 0),
+        meal_time TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS water_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        offered_ml REAL NOT NULL CHECK (offered_ml >= 0),
+        consumed_ml REAL CHECK (consumed_ml >= 0),
+        measured INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cat_profile (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        age REAL NOT NULL CHECK (age >= 0),
+        weight_kg REAL NOT NULL CHECK (weight_kg > 0),
+        favorite_food TEXT NOT NULL,
+        activity TEXT NOT NULL
+    );
+`);
+
+// Insert the default cat profile only if it does not exist
+const existingCat = db
+    .prepare("SELECT id FROM cat_profile WHERE id = 1")
+    .get();
+
+if (!existingCat) {
+    db.prepare(`
+        INSERT INTO cat_profile (
+            id, name, age, weight_kg, favorite_food, activity
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+        1,
+        "Mini",
+        3,
+        7,
+        "Reflex Chicken & Rice",
+        "Loves to play with me & toys, Catches birds from the window, eats grass, sleeps with me and eats happily"
+    );
+}
+
+console.log("CatCare SQLite database connected successfully");
+console.log(`Database location: ${databasePath}`);
+
+export default db;
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\middleware\error.middleware.ts ==========
+
+
+import { Request, Response, NextFunction } from "express";
+
+// Handle requests to routes that do not exist
+export const notFoundHandler = (
+    _req: Request,
+    res: Response
+): void => {
+    res.status(404).json({
+        success: false,
+        message: "Route not found."
+    });
+};
+
+// Centralized error-handling middleware
+export const errorHandler = (
+    err: Error & { type?: string },
+    _req: Request,
+    res: Response,
+    _next: NextFunction
+): void => {
+    console.error("API Error:", err.message);
+
+    // Handle malformed JSON requests
+    if (err.type === "entity.parse.failed") {
+        res.status(400).json({
+            success: false,
+            message: "Invalid JSON request body."
+        });
+        return;
+    }
+
+    // Handle unexpected server errors
+    res.status(500).json({
+        success: false,
+        message: "Internal server error."
+    });
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\routes\cat.routes.ts ==========
+
+import { Router } from "express";
+
+import {
+    getCatProfileController,
+    updateCatProfileController
+} from "../controllers/cat.controller";
+
+const router = Router();
+
+router.get("/", getCatProfileController);
+router.patch("/", updateCatProfileController);
+
+export default router;
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\routes\feeding.routes.ts ==========
+
+
+import { Router } from "express";
+
+import {
+    getAllFeedingRecordsController,
+    createFeedingRecordController,
+    getFeedingSummaryController,
+    getFeedingRecordByIdController,
+    updateFeedingRecordController,
+    deleteFeedingRecordController
+} from "../controllers/feeding.controller";
+
+const router = Router();
+
+// GET feeding summary
+router.get("/summary", getFeedingSummaryController);
+
+// GET all feeding records
+router.get("/", getAllFeedingRecordsController);
+
+// POST a feeding record
+router.post("/", createFeedingRecordController);
+
+// GET one feeding record by ID
+router.get("/:id", getFeedingRecordByIdController);
+
+// PATCH a feeding record
+router.patch("/:id", updateFeedingRecordController);
+
+// DELETE a feeding record
+router.delete("/:id", deleteFeedingRecordController);
+
+export default router;
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\routes\water.routes.ts ==========
+
+
+import { Router } from "express";
+
+import {
+    getAllWaterRecordsController,
+    createWaterRecordController,
+    getWaterSummaryController,
+    getWaterRecordByIdController,
+    updateWaterRecordController,
+    deleteWaterRecordController
+} from "../controllers/water.controller";
+
+const router = Router();
+
+// GET water summary
+router.get("/summary", getWaterSummaryController);
+
+// GET all water records
+router.get("/", getAllWaterRecordsController);
+
+// POST a new water record
+router.post("/", createWaterRecordController);
+
+// GET a specific water record
+router.get("/:id", getWaterRecordByIdController);
+
+// PATCH an existing water record
+router.patch("/:id", updateWaterRecordController);
+
+// DELETE a water record
+router.delete("/:id", deleteWaterRecordController);
+
+export default router;
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\routes\wellness.routes.ts ==========
+
+
+import { Router } from "express";
+
+import {
+    getDailyWellnessController
+} from "../controllers/wellness.controller";
+
+const router = Router();
+
+// GET daily wellness information
+router.get("/daily", getDailyWellnessController);
+
+export default router;
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\services\cat.service.ts ==========
+
+
+import db from "../database/database";
+import { CatProfile } from "../types/cat.types";
+
+export interface UpdateCatProfileInput {
+    name?: string;
+    age?: number;
+    weightKg?: number;
+    favoriteFood?: string;
+    activity?: string;
+}
+
+interface CatDatabaseRow {
+    id: number;
+    name: string;
+    age: number;
+    weight_kg: number;
+    favorite_food: string;
+    activity: string;
+}
+
+// Get the cat profile
+export const getCatProfile = (): CatProfile | null => {
+    const row = db
+        .prepare("SELECT * FROM cat_profile WHERE id = ?")
+        .get(1) as CatDatabaseRow | undefined;
+
+    if (!row) return null;
+
+    return {
+        id: row.id,
+        name: row.name,
+        age: row.age,
+        weightKg: row.weight_kg,
+        favoriteFood: row.favorite_food,
+        activity: row.activity
+    };
+};
+
+// Update selected cat profile fields
+export const updateCatProfile = (
+    input: UpdateCatProfileInput
+): CatProfile | null => {
+    const updates: string[] = [];
+    const values: (string | number)[] = [];
+
+    if (input.name !== undefined) {
+        updates.push("name = ?");
+        values.push(input.name);
+    }
+
+    if (input.age !== undefined) {
+        updates.push("age = ?");
+        values.push(input.age);
+    }
+
+    if (input.weightKg !== undefined) {
+        updates.push("weight_kg = ?");
+        values.push(input.weightKg);
+    }
+
+    if (input.favoriteFood !== undefined) {
+        updates.push("favorite_food = ?");
+        values.push(input.favoriteFood);
+    }
+
+    if (input.activity !== undefined) {
+        updates.push("activity = ?");
+        values.push(input.activity);
+    }
+
+    if (updates.length === 0) {
+        return getCatProfile();
+    }
+
+    values.push(1);
+
+    db.prepare(`
+        UPDATE cat_profile
+        SET ${updates.join(", ")}
+        WHERE id = ?
+    `).run(...values);
+
+    return getCatProfile();
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\services\feeding.service.ts ==========
+
+
+import db from "../database/database";
+
+import {
+    FeedingRecord,
+    FeedingDatabaseRow,
+    CreateFeedingInput
+} from "../types/feeding.types";
+
+// Convert SQLite row into API response format
+const formatFeeding = (
+    row: FeedingDatabaseRow
+): FeedingRecord => {
+    return {
+        id: row.id,
+        foodName: row.food_name,
+        quantityGrams: row.quantity_grams,
+        mealTime: row.meal_time,
+        notes: row.notes,
+        createdAt: row.created_at
+    };
+};
+
+// 1. Get all feeding records
+export const getAllFeedingRecords = (): FeedingRecord[] => {
+    const rows = db
+        .prepare("SELECT * FROM feeding_records ORDER BY id ASC")
+        .all() as FeedingDatabaseRow[];
+
+    return rows.map(formatFeeding);
+};
+
+// 2. Create a feeding record
+export const createFeedingRecord = (
+    input: CreateFeedingInput
+): FeedingRecord => {
+    const result = db.prepare(`
+        INSERT INTO feeding_records
+            (food_name, quantity_grams, meal_time, notes, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    `).run(
+        input.foodName.trim(),
+        input.quantityGrams,
+        input.mealTime,
+        input.notes ?? "",
+        new Date().toISOString()
+    );
+
+    const row = db.prepare(
+        "SELECT * FROM feeding_records WHERE id = ?"
+    ).get(result.lastInsertRowid) as FeedingDatabaseRow;
+
+    return formatFeeding(row);
+};
+
+// 3. Get feeding summary
+export const getFeedingSummary = (): {
+    totalRecords: number;
+    totalGrams: number;
+} => {
+    const summary = db.prepare(`
+        SELECT
+            COUNT(*) AS totalRecords,
+            COALESCE(SUM(quantity_grams), 0) AS totalGrams
+        FROM feeding_records
+    `).get() as {
+        totalRecords: number;
+        totalGrams: number;
+    };
+
+    return summary;
+};
+
+// 4. Get one feeding record by ID
+export const getFeedingRecordById = (
+    id: number
+): FeedingRecord | null => {
+    const row = db
+        .prepare("SELECT * FROM feeding_records WHERE id = ?")
+        .get(id) as FeedingDatabaseRow | undefined;
+
+    if (!row) return null;
+
+    return formatFeeding(row);
+};
+
+// 5. Update a feeding record
+export const updateFeedingRecord = (
+    id: number,
+    input: CreateFeedingInput
+): FeedingRecord | null => {
+    const result = db.prepare(`
+        UPDATE feeding_records
+        SET food_name = ?,
+            quantity_grams = ?,
+            meal_time = ?,
+            notes = ?
+        WHERE id = ?
+    `).run(
+        input.foodName.trim(),
+        input.quantityGrams,
+        input.mealTime,
+        input.notes ?? "",
+        id
+    );
+
+    if (result.changes === 0) return null;
+
+    const row = db.prepare(
+        "SELECT * FROM feeding_records WHERE id = ?"
+    ).get(id) as FeedingDatabaseRow;
+
+    return formatFeeding(row);
+};
+
+// 6. Delete a feeding record
+export const deleteFeedingRecord = (
+    id: number
+): boolean => {
+    const result = db.prepare(
+        "DELETE FROM feeding_records WHERE id = ?"
+    ).run(id);
+
+    return result.changes > 0;
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\services\water.service.ts ==========
+
+
+import db from "../database/database";
+
+import {
+    WaterRecord,
+    WaterDatabaseRow,
+    CreateWaterInput
+} from "../types/water.types";
+
+// Convert SQLite row into API response format
+const formatWater = (
+    row: WaterDatabaseRow
+): WaterRecord => {
+    return {
+        id: row.id,
+        offeredMl: row.offered_ml,
+        consumedMl: row.consumed_ml,
+        measured: Boolean(row.measured),
+        notes: row.notes,
+        createdAt: row.created_at
+    };
+};
+
+// 1. Get all water records
+export const getAllWaterRecords = (): WaterRecord[] => {
+    const rows = db
+        .prepare("SELECT * FROM water_records ORDER BY id ASC")
+        .all() as WaterDatabaseRow[];
+
+    return rows.map(formatWater);
+};
+
+// 2. Create a water record
+export const createWaterRecord = (
+    input: CreateWaterInput
+): WaterRecord => {
+
+    const result = db.prepare(`
+        INSERT INTO water_records
+            (offered_ml, consumed_ml, measured, notes, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    `).run(
+        input.offeredMl,
+        input.measured ? input.consumedMl : null,
+        input.measured ? 1 : 0,
+        input.notes ?? "",
+        new Date().toISOString()
+    );
+
+    const row = db.prepare(
+        "SELECT * FROM water_records WHERE id = ?"
+    ).get(result.lastInsertRowid) as WaterDatabaseRow;
+
+    return formatWater(row);
+};
+
+// 3. Get water records summary
+export const getWaterSummary = (): {
+    totalRecords: number;
+    totalOfferedMl: number;
+    measuredConsumptionRecords: number;
+    totalMeasuredConsumedMl: number;
+} => {
+    const summary = db.prepare(`
+        SELECT
+            COUNT(*) AS totalRecords,
+            COALESCE(SUM(offered_ml), 0) AS totalOfferedMl,
+            COALESCE(SUM(CASE WHEN measured = 1 THEN 1 ELSE 0 END), 0)
+                AS measuredConsumptionRecords,
+            COALESCE(SUM(
+                CASE WHEN measured = 1 THEN consumed_ml ELSE 0 END
+            ), 0) AS totalMeasuredConsumedMl
+        FROM water_records
+    `).get() as {
+        totalRecords: number;
+        totalOfferedMl: number;
+        measuredConsumptionRecords: number;
+        totalMeasuredConsumedMl: number;
+    };
+
+    return summary;
+};
+
+ // 4. Get a water record by ID
+export const getWaterRecordById = (
+    id: number
+): WaterRecord | null => {
+    const row = db
+        .prepare("SELECT * FROM water_records WHERE id = ?")
+        .get(id) as WaterDatabaseRow | undefined;
+
+    if (!row) {
+        return null;
+    }
+
+    return formatWater(row);
+};
+
+ // 5. Update a water record
+export const updateWaterRecord = (
+    id: number,
+    input: CreateWaterInput
+): WaterRecord | null => {
+
+    const result = db.prepare(`
+        UPDATE water_records
+        SET offered_ml = ?,
+            consumed_ml = ?,
+            measured = ?,
+            notes = ?
+        WHERE id = ?
+    `).run(
+        input.offeredMl,
+        input.measured ? input.consumedMl : null,
+        input.measured ? 1 : 0,
+        input.notes ?? "",
+        id
+    );
+
+    if (result.changes === 0) {
+        return null;
+    }
+
+    const row = db.prepare(
+        "SELECT * FROM water_records WHERE id = ?"
+    ).get(id) as WaterDatabaseRow;
+
+    return formatWater(row);
+};
+
+ // 6. Delete a water record
+export const deleteWaterRecord = (id: number): boolean => {
+    const result = db.prepare(
+        "DELETE FROM water_records WHERE id = ?"
+    ).run(id);
+
+    return result.changes > 0;
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\types\cat.types.ts ==========
+
+export interface CatProfile {
+    id: number;
+    name: string;
+    age: number;
+    weightKg: number;
+    favoriteFood: string;
+    activity: string;
+}
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\types\feeding.types.ts ==========
+
+export interface FeedingRecord {
+    id: number;
+    foodName: string;
+    quantityGrams: number;
+    mealTime: string;
+    notes: string;
+    createdAt: string;
+}
+
+export interface FeedingDatabaseRow {
+    id: number;
+    food_name: string;
+    quantity_grams: number;
+    meal_time: string;
+    notes: string;
+    created_at: string;
+}
+
+export interface CreateFeedingInput {
+    foodName: string;
+    quantityGrams: number;
+    mealTime: string;
+    notes?: string;
+}
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\types\water.types.ts ==========
+
+
+export interface WaterRecord {
+    id: number;
+    offeredMl: number;
+    consumedMl: number | null;
+    measured: boolean;
+    notes: string;
+    createdAt: string;
+}
+
+export interface WaterDatabaseRow {
+    id: number;
+    offered_ml: number;
+    consumed_ml: number | null;
+    measured: number;
+    notes: string;
+    created_at: string;
+}
+
+export interface CreateWaterInput {
+    offeredMl: number;
+    consumedMl?: number | null;
+    measured: boolean;
+    notes?: string;
+}
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\src\wellness\wellness.service.ts ==========
+
+
+import db from "../database/database";
+import { getCatProfile } from "../services/cat.service";
+
+export const getDailyWellness = (date: string) => {
+    // 1. Get cat profile
+    const cat = getCatProfile();
+
+    if (!cat) {
+        return null;
+    }
+
+    // 2. Get daily feeding summary
+    const feedingSummary = db.prepare(`
+        SELECT
+            COUNT(*) AS totalRecords,
+            COALESCE(SUM(quantity_grams), 0) AS totalGrams
+        FROM feeding_records
+        WHERE substr(created_at, 1, 10) = ?
+    `).get(date) as {
+        totalRecords: number;
+        totalGrams: number;
+    };
+
+    // 3. Get daily water summary
+    const waterSummary = db.prepare(`
+        SELECT
+            COUNT(*) AS totalRecords,
+            COALESCE(SUM(offered_ml), 0) AS totalOfferedMl,
+            COALESCE(SUM(
+                CASE WHEN measured = 1 THEN 1 ELSE 0 END
+            ), 0) AS measuredConsumptionRecords,
+            COALESCE(SUM(
+                CASE WHEN measured = 1 THEN consumed_ml ELSE 0 END
+            ), 0) AS totalMeasuredConsumedMl
+        FROM water_records
+        WHERE substr(created_at, 1, 10) = ?
+    `).get(date) as {
+        totalRecords: number;
+        totalOfferedMl: number;
+        measuredConsumptionRecords: number;
+        totalMeasuredConsumedMl: number;
+    };
+
+    // 4. Return combined daily wellness data
+    return {
+        date,
+        cat: {
+            id: cat.id,
+            name: cat.name,
+            age: cat.age,
+            weightKg: cat.weightKg
+        },
+        feeding: feedingSummary,
+        water: waterSummary
+    };
+};
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\public\index.html ==========
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CatCare Hub | Cat Health Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="logo">
+            <span>ðŸ¾</span>
+            <h2>CatCare Hub</h2>
+        </div>
+
+        <nav>
+            <a href="#" class="nav-link active" data-page="dashboard">
+                ðŸ  Dashboard
+            </a>
+
+            <a href="#" class="nav-link" data-page="profile">
+                ðŸ± Cat Profile
+            </a>
+
+            <a href="#" class="nav-link" data-page="feeding">
+                ðŸ— Feeding Records
+            </a>
+
+            <a href="#" class="nav-link" data-page="water">
+                ðŸ’§ Water Records
+            </a>
+
+            <a href="#" class="nav-link" data-page="wellness">
+                â¤ï¸ Wellness
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <p>Made with â¤ï¸ for your cat</p>
+        </div>
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <!-- TOP HEADER -->
+        <header class="topbar">
+            <div>
+                <h1 id="page-name">Dashboard</h1>
+                <p>Monitor your cat's daily health and activities.</p>
+            </div>
+
+            <div class="topbar-actions">
+                <span id="connection-status">Checking connection...</span>
+                <button type="button" id="refresh-btn">â†» Refresh</button>
+            </div>
+        </header>
+
+
+        <!-- DASHBOARD PAGE -->
+        <section id="dashboard-page" class="page active-page">
+
+            <div class="welcome-section">
+                <h2>Welcome to CatCare Hub! ðŸ¾</h2>
+                <p>Keep track of your cat's daily care and wellness.</p>
+                <p id="dashboard-date"></p>
+            </div>
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+                    <h3>Today's Food</h3>
+                    <h2 id="stat-food">0 g</h2>
+                    <p>Total food consumed</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Feeding Sessions</h3>
+                    <h2 id="stat-feeding-count">0</h2>
+                    <p>Today's meals</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Water Offered</h3>
+                    <h2 id="stat-water">0 ml</h2>
+                    <p>Today's water offered</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Water Records</h3>
+                    <h2 id="stat-water-count">0</h2>
+                    <p>Today's records</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Water Consumed</h3>
+                    <h2 id="stat-consumed">0 ml</h2>
+                    <p>Measured consumption</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Cat Weight</h3>
+                    <h2 id="stat-weight">0 kg</h2>
+                    <p>Current recorded weight</p>
+                </div>
+
+            </div>
+
+
+            <!-- RECENT FEEDING -->
+            <div class="content-card">
+                <div class="section-heading">
+                    <h2>Recent Feeding Records</h2>
+                    <button type="button" data-page="feeding">
+                        View All
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Food</th>
+                                <th>Quantity</th>
+                                <th>Meal Time</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="recent-feeding">
+                            <tr>
+                                <td colspan="4">Loading records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+
+
+        <!-- CAT PROFILE PAGE -->
+        <section id="profile-page" class="page">
+
+            <div class="content-card">
+                <h2>ðŸ± Cat Profile</h2>
+                <p>View and update your cat's personal information.</p>
+
+                <form id="profile-form">
+
+                    <div class="form-group">
+                        <label for="cat-name">Cat Name</label>
+                        <input
+                            type="text"
+                            id="cat-name"
+                            name="name"
+                            placeholder="Enter cat name"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-age">Age (years)</label>
+                        <input
+                            type="number"
+                            id="cat-age"
+                            name="age"
+                            min="0"
+                            step="0.1"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-weight">Weight (kg)</label>
+                        <input
+                            type="number"
+                            id="cat-weight"
+                            name="weightKg"
+                            min="0.1"
+                            step="0.1"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-food">Favorite Food</label>
+                        <input
+                            type="text"
+                            id="cat-food"
+                            name="favoriteFood"
+                            placeholder="Enter favorite food"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-activity">Activity and Behavior</label>
+                        <textarea
+                            id="cat-activity"
+                            name="activity"
+                            rows="4"
+                            placeholder="Describe your cat's activities"
+                        ></textarea>
+                    </div>
+
+                    <button type="submit">Update Cat Profile</button>
+
+                </form>
+            </div>
+
+        </section>
+
+
+
+        <!-- FEEDING PAGE -->
+        <section id="feeding-page" class="page">
+
+            <div class="content-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>ðŸ— Feeding Records</h2>
+                        <p>Manage your cat's daily food information.</p>
+                    </div>
+
+                    <button type="button" data-open-modal="feeding-modal">
+                        + Add Feeding Record
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Food Name</th>
+                                <th>Quantity (g)</th>
+                                <th>Meal Time</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="feeding-table">
+                            <tr>
+                                <td colspan="6">Loading feeding records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- WATER PAGE -->
+        <section id="water-page" class="page">
+
+            <div class="content-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>ðŸ’§ Water Records</h2>
+                        <p>Monitor your cat's daily water intake.</p>
+                    </div>
+
+                    <button type="button" data-open-modal="water-modal">
+                        + Add Water Record
+                    </button>
+                </div>
+
+
+                <div class="stats-grid">
+
+                    <div class="stat-card">
+                        <h3>Total Water Offered</h3>
+                        <h2 id="water-total-offered">0 ml</h2>
+                    </div>
+
+                    <div class="stat-card">
+                        <h3>Total Water Consumed</h3>
+                        <h2 id="water-total-consumed">0 ml</h2>
+                    </div>
+
+                </div>
+
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Offered (ml)</th>
+                                <th>Consumed (ml)</th>
+                                <th>Measured</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="water-table">
+                            <tr>
+                                <td colspan="6">Loading water records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- WELLNESS PAGE -->
+        <section id="wellness-page" class="page">
+
+            <div class="content-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>â¤ï¸ Daily Wellness Report</h2>
+                        <p>Review your cat's daily feeding and water activity.</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="wellness-date">Select Date</label>
+                    <input type="date" id="wellness-date">
+                </div>
+
+                <div id="wellness-report">
+                    <p>Select a date to view the wellness report.</p>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+
+    <!-- ADD FEEDING MODAL -->
+    <div id="feeding-modal" class="modal">
+
+        <div class="modal-box">
+
+            <div class="modal-heading">
+                <h2>Add Feeding Record</h2>
+
+                <button
+                    type="button"
+                    data-close-modal="feeding-modal"
+                >âœ•</button>
+            </div>
+
+            <form id="feeding-form">
+
+                <div class="form-group">
+                    <label>Food Name</label>
+                    <input
+                        name="foodName"
+                        type="text"
+                        placeholder="Example: Reflex Chicken"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Quantity (grams)</label>
+                    <input
+                        name="quantityGrams"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Meal Time</label>
+                    <select name="mealTime" required>
+                        <option value="">Select meal time</option>
+                        <option value="Breakfast">Breakfast</option>
+                        <option value="Lunch">Lunch</option>
+                        <option value="Dinner">Dinner</option>
+                        <option value="Snack">Snack</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea
+                        name="notes"
+                        placeholder="Optional notes"
+                    ></textarea>
+                </div>
+
+                <button type="submit">Save Feeding Record</button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ADD WATER MODAL -->
+    <div id="water-modal" class="modal">
+
+        <div class="modal-box">
+
+            <div class="modal-heading">
+                <h2>Add Water Record</h2>
+
+                <button
+                    type="button"
+                    data-close-modal="water-modal"
+                >âœ•</button>
+            </div>
+
+            <form id="water-form">
+
+                <div class="form-group">
+                    <label>Water Offered (ml)</label>
+                    <input
+                        name="offeredMl"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Was consumption measured?</label>
+
+                    <select name="measured" id="measured-select">
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Water Consumed (ml)</label>
+                    <input
+                        name="consumedMl"
+                        id="consumed-input"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea
+                        name="notes"
+                        placeholder="Optional notes"
+                    ></textarea>
+                </div>
+
+                <button type="submit">Save Water Record</button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- NOTIFICATION MESSAGE -->
+    <div id="message" class="message"></div>
+
+
+    <!-- JAVASCRIPT -->
+    <script src="script.js"></script>
+
+</body>
+</html>
+
+
+========== FILE: C:\Users\farhana.labonno\CatCare-API-TS\public\script.js ==========
+
+
+/* ==========================================
+   CATCARE - FRONTEND APPLICATION
+   HTML + CSS + JavaScript + Express API
+========================================== */
+
+// Empty URL means use the same server as the webpage.
+const API_URL = "";
+
+// Store application data
+let catProfile = null;
+let feedingRecords = [];
+let waterRecords = [];
+
+// DOM helper
+const $ = (id) => document.getElementById(id);
+
+
+// ==========================================
+// 1. API CONNECTION
+// ==========================================
+
+async function apiRequest(endpoint, options = {}) {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: {
+            ...(options.body ? { "Content-Type": "application/json" } : {}),
+            ...options.headers
+        }
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || result.success === false) {
+        throw new Error(result.message || `Request failed: ${response.status}`);
+    }
+
+    return result;
+}
+
+
+// ==========================================
+// 2. MESSAGE DISPLAY
+// ==========================================
+
+function showMessage(message, type = "success") {
+    const element = $("message");
+
+    if (!element) {
+        alert(message);
+        return;
+    }
+
+    element.textContent = message;
+    element.className = `message ${type}`;
+    element.style.display = "block";
+
+    window.setTimeout(() => {
+        element.style.display = "none";
+    }, 4000);
+}
+
+
+// ==========================================
+// 3. NAVIGATION
+// ==========================================
+
+function showPage(pageName) {
+    document.querySelectorAll(".page").forEach(page => {
+        page.classList.remove("active-page");
+    });
+
+    const selectedPage = $(`${pageName}-page`);
+
+    if (selectedPage) {
+        selectedPage.classList.add("active-page");
+    }
+
+    document.querySelectorAll(".nav-link").forEach(link => {
+        link.classList.toggle(
+            "active",
+            link.dataset.page === pageName
+        );
+    });
+
+    const pageNameElement = $("page-name");
+
+    if (pageNameElement) {
+        pageNameElement.textContent =
+            pageName.charAt(0).toUpperCase() + pageName.slice(1);
+    }
+
+    if (pageName === "dashboard") {
+        refreshApp();
+    }
+
+    if (pageName === "profile") {
+        loadCat();
+    }
+
+    if (pageName === "feeding") {
+        loadFeeding();
+    }
+
+    if (pageName === "water") {
+        loadWater();
+    }
+
+    if (pageName === "wellness") {
+        loadWellness();
+    }
+}
+
+document.querySelectorAll(".nav-link").forEach(link => {
+    link.addEventListener("click", () => {
+        showPage(link.dataset.page);
+    });
+});
+
+
+// ==========================================
+// 4. CAT PROFILE
+// ==========================================
+
+async function loadCat() {
+    try {
+        const result = await apiRequest("/api/cat");
+
+        catProfile = result.data || result.cat || result;
+
+        if (!catProfile) {
+            throw new Error("Cat profile not found.");
+        }
+
+        displayCatProfile();
+
+        return catProfile;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
+}
+
+
+function displayCatProfile() {
+    if (!catProfile) return;
+
+    if ($("profile-name")) {
+        $("profile-name").textContent = catProfile.name;
+    }
+
+    if ($("profile-age")) {
+        $("profile-age").textContent = catProfile.age;
+    }
+
+    if ($("profile-weight")) {
+        $("profile-weight").textContent =
+            `${catProfile.weightKg} kg`;
+    }
+
+    if ($("cat-name")) {
+        $("cat-name").value = catProfile.name || "";
+    }
+
+    if ($("cat-age")) {
+        $("cat-age").value = catProfile.age ?? "";
+    }
+
+    if ($("cat-weight")) {
+        $("cat-weight").value = catProfile.weightKg ?? "";
+    }
+
+    if ($("cat-food")) {
+        $("cat-food").value = catProfile.favoriteFood || "";
+    }
+
+    if ($("cat-activity")) {
+        $("cat-activity").value = catProfile.activity || "";
+    }
+
+    if ($("stat-weight")) {
+        $("stat-weight").textContent =
+            `${catProfile.weightKg} kg`;
+    }
+}
+
+
+// Update cat profile
+if ($("profile-form")) {
+    $("profile-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const input = {
+            name: $("cat-name").value.trim(),
+            age: Number($("cat-age").value),
+            weightKg: Number($("cat-weight").value),
+            favoriteFood: $("cat-food").value.trim(),
+            activity: $("cat-activity").value.trim()
+        };
+
+        if (!input.name || input.age < 0 || input.weightKg <= 0) {
+            showMessage("Please enter valid cat information.", "error");
+            return;
+        }
+
+        try {
+            await apiRequest("/api/cat", {
+                method: "PATCH",
+                body: JSON.stringify(input)
+            });
+
+            await loadCat();
+
+            showMessage("Cat profile updated successfully!");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// ==========================================
+// 5. FEEDING TRACKER
+// ==========================================
+
+async function loadFeeding() {
+    try {
+        const result = await apiRequest("/api/feeding");
+
+        feedingRecords = result.records || result.data || [];
+
+        renderFeeding();
+        updateDashboard();
+
+        return feedingRecords;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
+}
+
+
+function renderFeeding() {
+    const table = $("feeding-table");
+
+    if (!table) return;
+
+    table.innerHTML = "";
+
+    if (feedingRecords.length === 0) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="5">No feeding records found.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    feedingRecords.forEach(record => {
+        const row = document.createElement("tr");
+
+        const values = [
+            record.foodName,
+            `${record.quantityGrams} g`,
+            record.mealTime,
+            record.notes || ""
+        ];
+
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value ?? "";
+            row.appendChild(cell);
+        });
+
+        const actions = document.createElement("td");
+
+        const editButton = document.createElement("button");
+        editButton.textContent = "Edit";
+        editButton.type = "button";
+        editButton.addEventListener("click", () => editFeeding(record.id));
+
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.type = "button";
+        deleteButton.addEventListener("click", () => deleteFeeding(record.id));
+
+        actions.append(editButton, deleteButton);
+        row.appendChild(actions);
+
+        table.appendChild(row);
+    });
+}
+
+
+// Add feeding record
+if ($("feeding-form")) {
+    $("feeding-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const form = event.currentTarget;
+
+        const input = {
+            foodName: form.elements.foodName.value.trim(),
+            quantityGrams: Number(form.elements.quantityGrams.value),
+            mealTime: form.elements.mealTime.value,
+            notes: form.elements.notes.value.trim()
+        };
+
+        if (
+            !input.foodName ||
+            !Number.isFinite(input.quantityGrams) ||
+            input.quantityGrams <= 0 ||
+            !input.mealTime
+        ) {
+            showMessage("Please enter valid feeding information.", "error");
+            return;
+        }
+
+        try {
+            await apiRequest("/api/feeding", {
+                method: "POST",
+                body: JSON.stringify(input)
+            });
+
+            form.reset();
+
+            closeModal("feeding-modal");
+
+            await loadFeeding();
+
+            showMessage("Feeding record saved successfully!");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// Edit feeding record
+async function editFeeding(id) {
+    const record = feedingRecords.find(item => item.id === id);
+
+    if (!record) return;
+
+    const foodName = prompt("Food name:", record.foodName);
+    if (foodName === null) return;
+
+    const quantity = prompt("Quantity in grams:", record.quantityGrams);
+    if (quantity === null) return;
+
+    const mealTime = prompt("Meal time:", record.mealTime);
+    if (mealTime === null) return;
+
+    const notes = prompt("Notes:", record.notes || "");
+    if (notes === null) return;
+
+    const input = {
+        foodName: foodName.trim(),
+        quantityGrams: Number(quantity),
+        mealTime: mealTime.trim(),
+        notes: notes.trim()
+    };
+
+    if (
+        !input.foodName ||
+        !Number.isFinite(input.quantityGrams) ||
+        input.quantityGrams <= 0 ||
+        !input.mealTime
+    ) {
+        showMessage("Invalid feeding information.", "error");
+        return;
+    }
+
+    try {
+        await apiRequest(`/api/feeding/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify(input)
+        });
+
+        await loadFeeding();
+
+        showMessage("Feeding record updated!");
+    } catch (error) {
+        showMessage(error.message, "error");
+    }
+}
+
+
+// Delete feeding record
+async function deleteFeeding(id) {
+    if (!confirm("Are you sure you want to delete this feeding record?")) {
+        return;
+    }
+
+    try {
+        await apiRequest(`/api/feeding/${id}`, {
+            method: "DELETE"
+        });
+
+        await loadFeeding();
+
+        showMessage("Feeding record deleted!");
+    } catch (error) {
+        showMessage(error.message, "error");
+    }
+}
+
+
+// ==========================================
+// 6. WATER TRACKER
+// ==========================================
+
+async function loadWater() {
+    try {
+        const result = await apiRequest("/api/water");
+
+        waterRecords = result.records || result.data || [];
+
+        renderWater();
+        updateDashboard();
+
+        return waterRecords;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
+}
+
+
+function renderWater() {
+    const table = $("water-table");
+
+    if (!table) return;
+
+    table.innerHTML = "";
+
+    if (waterRecords.length === 0) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="5">No water records found.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    waterRecords.forEach(record => {
+        const row = document.createElement("tr");
+
+        const values = [
+            `${record.offeredMl} ml`,
+            record.measured ? `${record.consumedMl} ml` : "Not measured",
+            record.measured ? "Yes" : "No",
+            record.notes || ""
+        ];
+
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value ?? "";
+            row.appendChild(cell);
+        });
+
+        const actions = document.createElement("td");
+
+        const editButton = document.createElement("button");
+        editButton.textContent = "Edit";
+        editButton.type = "button";
+        editButton.addEventListener("click", () => editWater(record.id));
+
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.type = "button";
+        deleteButton.addEventListener("click", () => deleteWater(record.id));
+
+        actions.append(editButton, deleteButton);
+        row.appendChild(actions);
+
+        table.appendChild(row);
+    });
+
+    const totalOffered = waterRecords.reduce(
+        (sum, record) => sum + Number(record.offeredMl || 0), 0
+    );
+
+    const totalConsumed = waterRecords.reduce(
+        (sum, record) =>
+            sum + (record.measured ? Number(record.consumedMl || 0) : 0),
+        0
+    );
+
+    if ($("water-total-offered")) {
+        $("water-total-offered").textContent = `${totalOffered} ml`;
+    }
+
+    if ($("water-total-consumed")) {
+        $("water-total-consumed").textContent = `${totalConsumed} ml`;
+    }
+}
+
+
+// Add water record
+if ($("water-form")) {
+    $("water-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const form = event.currentTarget;
+
+        const measured = form.elements.measured.value === "true";
+
+        const input = {
+            offeredMl: Number(form.elements.offeredMl.value),
+            measured,
+            consumedMl: measured
+                ? Number(form.elements.consumedMl.value)
+                : null,
+            notes: form.elements.notes.value.trim()
+        };
+
+        if (
+            !Number.isFinite(input.offeredMl) ||
+            input.offeredMl < 0 ||
+            (
+                measured &&
+                (!Number.isFinite(input.consumedMl) ||
+                 input.consumedMl < 0)
+            )
+        ) {
+            showMessage("Please enter valid water information.", "error");
+            return;
+        }
+
+        try {
+            await apiRequest("/api/water", {
+                method: "POST",
+                body: JSON.stringify(input)
+            });
+
+            form.reset();
+
+            closeModal("water-modal");
+
+            await loadWater();
+
+            showMessage("Water record saved successfully!");
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// Edit water record
+async function editWater(id) {
+    const record = waterRecords.find(item => item.id === id);
+
+    if (!record) return;
+
+    const offered = prompt("Water offered (ml):", record.offeredMl);
+    if (offered === null) return;
+
+    const measured = confirm("Do you have a measured consumption value?");
+
+    let consumed = null;
+
+    if (measured) {
+        consumed = prompt(
+            "Water consumed (ml):",
+            record.consumedMl ?? ""
+        );
+
+        if (consumed === null) return;
+
+        consumed = Number(consumed);
+    }
+
+    const notes = prompt("Notes:", record.notes || "");
+    if (notes === null) return;
+
+    const input = {
+        offeredMl: Number(offered),
+        measured,
+        consumedMl: measured ? consumed : null,
+        notes: notes.trim()
+    };
+
+    if (
+        !Number.isFinite(input.offeredMl) ||
+        input.offeredMl < 0 ||
+        (measured && (!Number.isFinite(consumed) || consumed < 0))
+    ) {
+        showMessage("Invalid water information.", "error");
+        return;
+    }
+
+    try {
+        await apiRequest(`/api/water/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify(input)
+        });
+
+        await loadWater();
+
+        showMessage("Water record updated!");
+    } catch (error) {
+        showMessage(error.message, "error");
+    }
+}
+
+
+// Delete water record
+async function deleteWater(id) {
+    if (!confirm("Are you sure you want to delete this water record?")) {
+        return;
+    }
+
+    try {
+        await apiRequest(`/api/water/${id}`, {
+            method: "DELETE"
+        });
+
+        await loadWater();
+
+        showMessage("Water record deleted!");
+    } catch (error) {
+        showMessage(error.message, "error");
+    }
+}
+
+
+// ==========================================
+// 7. DASHBOARD
+// ==========================================
+
+function isToday(dateValue) {
+    if (!dateValue) return false;
+
+    const date = new Date(dateValue);
+
+    const today = new Date();
+
+    return (
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate()
+    );
+}
+
+
+function updateDashboard() {
+    const todayFeeding = feedingRecords.filter(
+        record => isToday(record.createdAt)
+    );
+
+    const todayWater = waterRecords.filter(
+        record => isToday(record.createdAt)
+    );
+
+    const foodTotal = todayFeeding.reduce(
+        (sum, record) => sum + Number(record.quantityGrams || 0),
+        0
+    );
+
+    const waterOffered = todayWater.reduce(
+        (sum, record) => sum + Number(record.offeredMl || 0),
+        0
+    );
+
+    const waterConsumed = todayWater.reduce(
+        (sum, record) =>
+            sum + (record.measured ? Number(record.consumedMl || 0) : 0),
+        0
+    );
+
+    if ($("stat-food")) {
+        $("stat-food").textContent = `${foodTotal} g`;
+    }
+
+    if ($("stat-feeding-count")) {
+        $("stat-feeding-count").textContent = todayFeeding.length;
+    }
+
+    if ($("stat-water")) {
+        $("stat-water").textContent = `${waterOffered} ml`;
+    }
+
+    if ($("stat-water-count")) {
+        $("stat-water-count").textContent = todayWater.length;
+    }
+
+    if ($("stat-consumed")) {
+        $("stat-consumed").textContent = `${waterConsumed} ml`;
+    }
+
+    if (catProfile && $("stat-weight")) {
+        $("stat-weight").textContent = `${catProfile.weightKg} kg`;
+    }
+
+    if ($("dashboard-date")) {
+        $("dashboard-date").textContent =
+            new Date().toLocaleDateString();
+    }
+
+    renderRecentFeeding(todayFeeding);
+}
+
+
+function renderRecentFeeding(records) {
+    const container = $("recent-feeding");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (records.length === 0) {
+        container.textContent = "No feeding activity recorded today.";
+        return;
+    }
+
+    records.slice(-5).reverse().forEach(record => {
+        const item = document.createElement("p");
+
+        item.textContent =
+            `${record.foodName} â€” ${record.quantityGrams} g (${record.mealTime})`;
+
+        container.appendChild(item);
+    });
+}
+
+
+// ==========================================
+// 8. WELLNESS REPORT
+// ==========================================
+
+async function loadWellness() {
+    const date = $("wellness-date")?.value ||
+        new Date().toISOString().slice(0, 10);
+
+    try {
+        const result = await apiRequest(
+            `/api/wellness/daily?date=${encodeURIComponent(date)}`
+        );
+
+        const report = result.data || result;
+
+        renderWellness(report);
+
+        return report;
+    } catch (error) {
+        showMessage(error.message, "error");
+        throw error;
+    }
+}
+
+
+function renderWellness(report) {
+    const container = $("wellness-report");
+
+    if (!container) return;
+
+    if (!report) {
+        container.textContent = "No wellness report available.";
+        return;
+    }
+
+    const feeding = report.feeding || {};
+    const water = report.water || {};
+    const cat = report.cat || {};
+
+    container.innerHTML = "";
+
+    const details = [
+        ["Date", report.date || ""],
+        ["Cat", cat.name || "Not available"],
+        ["Food records", feeding.totalRecords ?? 0],
+        ["Total food", `${feeding.totalGrams ?? 0} g`],
+        ["Water records", water.totalRecords ?? 0],
+        ["Water offered", `${water.totalOfferedMl ?? 0} ml`],
+        [
+            "Measured water consumed",
+            `${water.totalMeasuredConsumedMl ?? 0} ml`
+        ]
+    ];
+
+    details.forEach(([label, value]) => {
+        const item = document.createElement("p");
+
+        const strong = document.createElement("strong");
+        strong.textContent = `${label}: `;
+
+        item.append(strong, document.createTextNode(String(value)));
+
+        container.appendChild(item);
+    });
+}
+
+
+if ($("wellness-date")) {
+    $("wellness-date").addEventListener("change", loadWellness);
+}
+
+
+// ==========================================
+// 9. MODAL HELPERS
+// ==========================================
+
+function openModal(id) {
+    const modal = $(id);
+
+    if (modal) {
+        modal.style.display = "flex";
+    }
+}
+
+
+function closeModal(id) {
+    const modal = $(id);
+
+    if (modal) {
+        modal.style.display = "none";
+    }
+}
+
+
+// Connect buttons with modal IDs
+document.querySelectorAll("[data-open-modal]").forEach(button => {
+    button.addEventListener("click", () => {
+        openModal(button.dataset.openModal);
+    });
+});
+
+document.querySelectorAll("[data-close-modal]").forEach(button => {
+    button.addEventListener("click", () => {
+        closeModal(button.dataset.closeModal);
+    });
+});
+
+
+// ==========================================
+// 10. REFRESH APPLICATION
+// ==========================================
+
+async function refreshApp() {
+    const status = $("connection-status");
+
+    if (status) {
+        status.textContent = "Connecting...";
+    }
+
+    try {
+        await Promise.all([
+            loadCat(),
+            loadFeeding(),
+            loadWater()
+        ]);
+
+        updateDashboard();
+
+        if (status) {
+            status.textContent = "Connected";
+        }
+    } catch (error) {
+        if (status) {
+            status.textContent = "Connection error";
+        }
+
+        console.error("CatCare loading error:", error);
+    }
+}
+
+
+if ($("refresh-btn")) {
+    $("refresh-btn").addEventListener("click", refreshApp);
+}
+
+
+// ==========================================
+// 11. START APPLICATION
+// ==========================================
+
+document.addEventListener("DOMContentLoaded", async () => {
+    if ($("dashboard-date")) {
+        $("dashboard-date").textContent =
+            new Date().toLocaleDateString();
+    }
+
+    if ($("wellness-date")) {
+        $("wellness-date").value =
+            new Date().toISOString().slice(0, 10);
+    }
+
+    await refreshApp();
+});
+

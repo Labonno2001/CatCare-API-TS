@@ -4,336 +4,489 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CatCare | Pet Wellness Dashboard</title>
+    <title>CatCare Hub | Cat Health Dashboard</title>
     <link rel="stylesheet" href="style.css">
-    <script src="script.js" defer></script>
 </head>
 
 <body>
-<div class="app">
 
+    <!-- SIDEBAR -->
     <aside class="sidebar">
-        <div class="brand">
-            <span class="logo">🐾</span>
-            <div>
-                <h2>CatCare</h2>
-                <small>PET WELLNESS SYSTEM</small>
-            </div>
+        <div class="logo">
+            <span>🐾</span>
+            <h2>CatCare Hub</h2>
         </div>
 
-        <p class="menu-title">MAIN MENU</p>
-
         <nav>
-            <button class="nav-link active" data-page="dashboard">🏠 Dashboard</button>
-            <button class="nav-link" data-page="profile">🐱 Cat Profile</button>
-            <button class="nav-link" data-page="feeding">🍗 Feeding Records</button>
-            <button class="nav-link" data-page="water">💧 Water Records</button>
-            <button class="nav-link" data-page="wellness">💚 Daily Wellness</button>
+            <a href="#" class="nav-link active" data-page="dashboard">
+                🏠 Dashboard
+            </a>
+
+            <a href="#" class="nav-link" data-page="profile">
+                🐱 Cat Profile
+            </a>
+
+            <a href="#" class="nav-link" data-page="feeding">
+                🍗 Feeding Records
+            </a>
+
+            <a href="#" class="nav-link" data-page="water">
+                💧 Water Records
+            </a>
+
+            <a href="#" class="nav-link" data-page="wellness">
+                ❤️ Wellness
+            </a>
         </nav>
 
         <div class="sidebar-footer">
-            <h4>💚 Healthy paws, happy hearts.</h4>
-            <p>Every little act of care makes a difference.</p>
-            <small>CatCare · TypeScript Edition</small>
+            <p>Made with ❤️ for your cat</p>
         </div>
     </aside>
 
+
+    <!-- MAIN CONTENT -->
     <main class="main-content">
 
+        <!-- TOP HEADER -->
         <header class="topbar">
-            <p>Workspace / <strong id="page-name">Dashboard</strong></p>
             <div>
-                <span id="connection-status">Connecting...</span>
-                <button id="refresh-btn">↻ Refresh</button>
+                <h1 id="page-name">Dashboard</h1>
+                <p>Monitor your cat's daily health and activities.</p>
+            </div>
+
+            <div class="topbar-actions">
+                <span id="connection-status">Checking connection...</span>
+                <button type="button" id="refresh-btn">↻ Refresh</button>
             </div>
         </header>
 
-        <div class="content">
 
-            <!-- DASHBOARD -->
-            <section id="dashboard" class="page active-page">
+        <!-- DASHBOARD PAGE -->
+        <section id="dashboard-page" class="page active-page">
 
-                <div class="welcome">
-                    <div>
-                        <small>YOUR PET'S HEALTH MATTERS</small>
-                        <h1>Welcome to CatCare 🐾</h1>
-                        <p>Monitor your cat's daily activities and wellness.</p>
-                    </div>
-                    <input type="date" id="dashboard-date">
+            <div class="welcome-section">
+                <h2>Welcome to CatCare Hub! 🐾</h2>
+                <p>Keep track of your cat's daily care and wellness.</p>
+                <p id="dashboard-date"></p>
+            </div>
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+                    <h3>Today's Food</h3>
+                    <h2 id="stat-food">0 g</h2>
+                    <p>Total food consumed</p>
                 </div>
 
-                <div class="hero">
-                    <div>
-                        <span>YOUR DAILY COMPANION</span>
-                        <h2>Every purr tells<br>a beautiful story.</h2>
-                        <p>Keep your furry friend healthy, hydrated and happy.</p>
-                        <button onclick="showPage('profile')">View Cat Profile →</button>
-                    </div>
-                    <div class="hero-cat">🐈</div>
+                <div class="stat-card">
+                    <h3>Feeding Sessions</h3>
+                    <h2 id="stat-feeding-count">0</h2>
+                    <p>Today's meals</p>
                 </div>
 
-                <h2 class="section-title">Today's Overview</h2>
+                <div class="stat-card">
+                    <h3>Water Offered</h3>
+                    <h2 id="stat-water">0 ml</h2>
+                    <p>Today's water offered</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Water Records</h3>
+                    <h2 id="stat-water-count">0</h2>
+                    <p>Today's records</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Water Consumed</h3>
+                    <h2 id="stat-consumed">0 ml</h2>
+                    <p>Measured consumption</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Cat Weight</h3>
+                    <h2 id="stat-weight">0 kg</h2>
+                    <p>Current recorded weight</p>
+                </div>
+
+            </div>
+
+
+            <!-- RECENT FEEDING -->
+            <div class="content-card">
+                <div class="section-heading">
+                    <h2>Recent Feeding Records</h2>
+                    <button type="button" data-page="feeding">
+                        View All
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Food</th>
+                                <th>Quantity</th>
+                                <th>Meal Time</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="recent-feeding">
+                            <tr>
+                                <td colspan="4">Loading records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+
+
+        <!-- CAT PROFILE PAGE -->
+        <section id="profile-page" class="page">
+
+            <div class="content-card">
+                <h2>🐱 Cat Profile</h2>
+                <p>View and update your cat's personal information.</p>
+
+                <form id="profile-form">
+
+                    <div class="form-group">
+                        <label for="cat-name">Cat Name</label>
+                        <input
+                            type="text"
+                            id="cat-name"
+                            name="name"
+                            placeholder="Enter cat name"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-age">Age (years)</label>
+                        <input
+                            type="number"
+                            id="cat-age"
+                            name="age"
+                            min="0"
+                            step="0.1"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-weight">Weight (kg)</label>
+                        <input
+                            type="number"
+                            id="cat-weight"
+                            name="weightKg"
+                            min="0.1"
+                            step="0.1"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-food">Favorite Food</label>
+                        <input
+                            type="text"
+                            id="cat-food"
+                            name="favoriteFood"
+                            placeholder="Enter favorite food"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cat-activity">Activity and Behavior</label>
+                        <textarea
+                            id="cat-activity"
+                            name="activity"
+                            rows="4"
+                            placeholder="Describe your cat's activities"
+                        ></textarea>
+                    </div>
+
+                    <button type="submit">Update Cat Profile</button>
+
+                </form>
+            </div>
+
+        </section>
+
+
+
+        <!-- FEEDING PAGE -->
+        <section id="feeding-page" class="page">
+
+            <div class="content-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>🍗 Feeding Records</h2>
+                        <p>Manage your cat's daily food information.</p>
+                    </div>
+
+                    <button type="button" data-open-modal="feeding-modal">
+                        + Add Feeding Record
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Food Name</th>
+                                <th>Quantity (g)</th>
+                                <th>Meal Time</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="feeding-table">
+                            <tr>
+                                <td colspan="6">Loading feeding records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- WATER PAGE -->
+        <section id="water-page" class="page">
+
+            <div class="content-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>💧 Water Records</h2>
+                        <p>Monitor your cat's daily water intake.</p>
+                    </div>
+
+                    <button type="button" data-open-modal="water-modal">
+                        + Add Water Record
+                    </button>
+                </div>
+
 
                 <div class="stats-grid">
-                    <div class="stat-card peach">
-                        <span>🍗</span>
-                        <p>Food Served</p>
-                        <h2 id="stat-food">0 g</h2>
-                        <small id="stat-feeding-count">0 records</small>
-                    </div>
 
-                    <div class="stat-card blue">
-                        <span>💧</span>
-                        <p>Water Offered</p>
-                        <h2 id="stat-water">0 ml</h2>
-                        <small id="stat-water-count">0 records</small>
-                    </div>
-
-                    <div class="stat-card green">
-                        <span>🌿</span>
-                        <p>Measured Water Intake</p>
-                        <h2 id="stat-consumed">0 ml</h2>
-                        <small>Measured consumption</small>
-                    </div>
-
-                    <div class="stat-card purple">
-                        <span>⚖️</span>
-                        <p>Current Weight</p>
-                        <h2 id="stat-weight">-- kg</h2>
-                        <small>Cat profile</small>
-                    </div>
-                </div>
-
-                <div class="dashboard-grid">
-                    <div class="panel">
-                        <h3>Recent Feeding Records</h3>
-                        <div id="recent-feeding"></div>
-                    </div>
-
-                    <div class="panel">
-                        <h3>Daily Wellness</h3>
-                        <div id="dashboard-wellness">
-                            <p>Feeding records: <strong id="wellness-feeding">0</strong></p>
-                            <p>Water records: <strong id="wellness-water">0</strong></p>
-                            <p>Total food: <strong id="wellness-food">0 g</strong></p>
-                            <p>Water offered: <strong id="wellness-offered">0 ml</strong></p>
-                        </div>
-                        <button onclick="showPage('wellness')">View Wellness Report</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- CAT PROFILE -->
-            <section id="profile" class="page">
-                <div class="page-heading">
-                    <h1>Cat Profile 🐱</h1>
-                    <p>View and update your cat's personal information.</p>
-                </div>
-
-                <div class="profile-layout">
-                    <div class="profile-card">
-                        <div class="profile-image">🐈</div>
-                        <h2 id="profile-name">Loading...</h2>
-                        <p>Your beloved companion</p>
-
-                        <div class="profile-facts">
-                            <div>
-                                <strong id="profile-age">--</strong>
-                                <span>Years old</span>
-                            </div>
-                            <div>
-                                <strong id="profile-weight">--</strong>
-                                <span>Weight (kg)</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <h3>Edit Cat Information</h3>
-
-                        <form id="profile-form">
-                            <label>Cat Name</label>
-                            <input id="cat-name" name="name" required>
-
-                            <div class="form-row">
-                                <div>
-                                    <label>Age (years)</label>
-                                    <input id="cat-age" name="age" type="number" min="0" step="0.1" required>
-                                </div>
-                                <div>
-                                    <label>Weight (kg)</label>
-                                    <input id="cat-weight" name="weightKg" type="number" min="0.1" step="0.1" required>
-                                </div>
-                            </div>
-
-                            <label>Favorite Food</label>
-                            <input id="cat-food" name="favoriteFood" required>
-
-                            <label>Activity</label>
-                            <textarea id="cat-activity" name="activity" rows="4"></textarea>
-
-                            <button type="submit">Save Profile</button>
-                        </form>
-                    </div>
-                </div>
-            </section>
-
-            <!-- FEEDING RECORDS -->
-            <section id="feeding" class="page">
-                <div class="page-heading">
-                    <div>
-                        <h1>Feeding Management 🍗</h1>
-                        <p>Manage your cat's daily meals.</p>
-                    </div>
-                    <button onclick="openModal('feeding-modal')">+ Add Feeding</button>
-                </div>
-
-                <div class="panel">
-                    <h3>All Feeding Records</h3>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Food Name</th>
-                                    <th>Quantity</th>
-                                    <th>Meal Time</th>
-                                    <th>Date</th>
-                                    <th>Notes</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="feeding-table"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- WATER RECORDS -->
-            <section id="water" class="page">
-                <div class="page-heading">
-                    <div>
-                        <h1>Water Management 💧</h1>
-                        <p>Monitor your cat's hydration.</p>
-                    </div>
-                    <button onclick="openModal('water-modal')">+ Add Water Record</button>
-                </div>
-
-                <div class="stats-grid">
-                    <div class="stat-card blue">
-                        <p>Total Water Offered</p>
+                    <div class="stat-card">
+                        <h3>Total Water Offered</h3>
                         <h2 id="water-total-offered">0 ml</h2>
                     </div>
-                    <div class="stat-card green">
-                        <p>Measured Consumption</p>
+
+                    <div class="stat-card">
+                        <h3>Total Water Consumed</h3>
                         <h2 id="water-total-consumed">0 ml</h2>
                     </div>
+
                 </div>
 
-                <div class="panel">
-                    <h3>Water Records</h3>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Offered</th>
-                                    <th>Consumed</th>
-                                    <th>Measured</th>
-                                    <th>Date</th>
-                                    <th>Notes</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="water-table"></tbody>
-                        </table>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Offered (ml)</th>
+                                <th>Consumed (ml)</th>
+                                <th>Measured</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="water-table">
+                            <tr>
+                                <td colspan="6">Loading water records...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- WELLNESS PAGE -->
+        <section id="wellness-page" class="page">
+
+            <div class="content-card">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>❤️ Daily Wellness Report</h2>
+                        <p>Review your cat's daily feeding and water activity.</p>
                     </div>
                 </div>
-            </section>
 
-            <!-- WELLNESS REPORT -->
-            <section id="wellness" class="page">
-                <div class="page-heading">
-                    <h1>Daily Wellness Report 💚</h1>
-                    <p>Review your cat's daily health activities.</p>
-                </div>
-
-                <div class="panel wellness-date">
-                    <label for="wellness-date">Select report date</label>
+                <div class="form-group">
+                    <label for="wellness-date">Select Date</label>
                     <input type="date" id="wellness-date">
-                    <button onclick="loadWellness()">Generate Report</button>
                 </div>
 
-                <div id="wellness-report" class="report-grid">
-                    <p>Select a date to generate your report.</p>
+                <div id="wellness-report">
+                    <p>Select a date to view the wellness report.</p>
                 </div>
-            </section>
 
-        </div>
+            </div>
+
+        </section>
+
     </main>
-</div>
 
-<!-- FEEDING MODAL -->
-<div id="feeding-modal" class="modal">
-    <div class="modal-box">
-        <div class="modal-heading">
-            <h2>Add Feeding Record</h2>
-            <button onclick="closeModal('feeding-modal')">✕</button>
+
+
+    <!-- ADD FEEDING MODAL -->
+    <div id="feeding-modal" class="modal">
+
+        <div class="modal-box">
+
+            <div class="modal-heading">
+                <h2>Add Feeding Record</h2>
+
+                <button
+                    type="button"
+                    data-close-modal="feeding-modal"
+                >✕</button>
+            </div>
+
+            <form id="feeding-form">
+
+                <div class="form-group">
+                    <label>Food Name</label>
+                    <input
+                        name="foodName"
+                        type="text"
+                        placeholder="Example: Reflex Chicken"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Quantity (grams)</label>
+                    <input
+                        name="quantityGrams"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Meal Time</label>
+                    <select name="mealTime" required>
+                        <option value="">Select meal time</option>
+                        <option value="Breakfast">Breakfast</option>
+                        <option value="Lunch">Lunch</option>
+                        <option value="Dinner">Dinner</option>
+                        <option value="Snack">Snack</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea
+                        name="notes"
+                        placeholder="Optional notes"
+                    ></textarea>
+                </div>
+
+                <button type="submit">Save Feeding Record</button>
+
+            </form>
+
         </div>
 
-        <form id="feeding-form">
-            <label>Food Name</label>
-            <input name="foodName" required>
-
-            <label>Quantity (grams)</label>
-            <input name="quantityGrams" type="number" min="0.1" step="0.1" required>
-
-            <label>Meal Time</label>
-            <select name="mealTime">
-                <option>Breakfast</option>
-                <option>Morning</option>
-                <option>Lunch</option>
-                <option>Evening</option>
-                <option>Dinner</option>
-                <option>Snack</option>
-            </select>
-
-            <label>Notes</label>
-            <textarea name="notes"></textarea>
-
-            <button type="submit">Save Feeding Record</button>
-        </form>
     </div>
-</div>
 
-<!-- WATER MODAL -->
-<div id="water-modal" class="modal">
-    <div class="modal-box">
-        <div class="modal-heading">
-            <h2>Add Water Record</h2>
-            <button onclick="closeModal('water-modal')">✕</button>
+
+
+    <!-- ADD WATER MODAL -->
+    <div id="water-modal" class="modal">
+
+        <div class="modal-box">
+
+            <div class="modal-heading">
+                <h2>Add Water Record</h2>
+
+                <button
+                    type="button"
+                    data-close-modal="water-modal"
+                >✕</button>
+            </div>
+
+            <form id="water-form">
+
+                <div class="form-group">
+                    <label>Water Offered (ml)</label>
+                    <input
+                        name="offeredMl"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Was consumption measured?</label>
+
+                    <select name="measured" id="measured-select">
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Water Consumed (ml)</label>
+                    <input
+                        name="consumedMl"
+                        id="consumed-input"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea
+                        name="notes"
+                        placeholder="Optional notes"
+                    ></textarea>
+                </div>
+
+                <button type="submit">Save Water Record</button>
+
+            </form>
+
         </div>
 
-        <form id="water-form">
-            <label>Water Offered (ml)</label>
-            <input name="offeredMl" type="number" min="0" step="0.1" required>
-
-            <label>Was consumption measured?</label>
-            <select name="measured" id="measured-select">
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-            </select>
-
-            <label>Water Consumed (ml)</label>
-            <input name="consumedMl" id="consumed-input" type="number" min="0" step="0.1">
-
-            <label>Notes</label>
-            <textarea name="notes"></textarea>
-
-            <button type="submit">Save Water Record</button>
-        </form>
     </div>
-</div>
 
-<div id="message" class="message"></div>
+
+
+    <!-- NOTIFICATION MESSAGE -->
+    <div id="message" class="message"></div>
+
+
+    <!-- JAVASCRIPT -->
+    <script src="script.js"></script>
 
 </body>
 </html>

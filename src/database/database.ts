@@ -1,17 +1,28 @@
 
 import Database from "better-sqlite3";
 import path from "node:path";
+import { mkdirSync } from "node:fs";
+import dotenv from "dotenv";
 
-const databasePath = path.join(
-    process.cwd(),
-    "data",
-    "catcare.db"
-);
+// Load environment variables before reading database configuration
+dotenv.config();
 
+// Use Render's persistent disk path in production.
+// Use the local data folder during development.
+const databasePath =
+    process.env.DATABASE_PATH ||
+    path.join(process.cwd(), "data", "catcare.db");
+
+// Ensure the database directory exists
+mkdirSync(path.dirname(databasePath), { recursive: true });
+
+// Connect to SQLite
 const db = new Database(databasePath);
 
+// Enable foreign key constraints
 db.pragma("foreign_keys = ON");
 
+// Create database tables if they do not already exist
 db.exec(`
     CREATE TABLE IF NOT EXISTS feeding_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +52,7 @@ db.exec(`
     );
 `);
 
+// Insert the default cat profile only if it does not exist
 const existingCat = db
     .prepare("SELECT id FROM cat_profile WHERE id = 1")
     .get();

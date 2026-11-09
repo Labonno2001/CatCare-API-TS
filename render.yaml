@@ -1,0 +1,25 @@
+﻿services:
+  - type: web
+    name: catcare-api-ts
+    runtime: node
+    plan: 0.5c-512mb
+    region: singapore
+    branch: main
+    autoDeployTrigger: commit
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: DATABASE_PATH
+        value: /var/data/catcare.db
+
+    disk:
+      name: catcare-data
+      mountPath: /var/data
+      sizeGB: 1

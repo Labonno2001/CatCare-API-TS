@@ -1,30 +1,56 @@
 
 /* ==========================================
-   CATCARE - FRONTEND APPLICATION
-   HTML + CSS + JavaScript + Express API
+   CATCARE HUB
+   Frontend: HTML + CSS + JavaScript
+   Backend: TypeScript + Express API
 ========================================== */
 
-// Empty URL means use the same server as the webpage.
 const API_URL = "";
 
-// Store application data
 let catProfile = null;
 let feedingRecords = [];
 let waterRecords = [];
 
-// DOM helper
 const $ = (id) => document.getElementById(id);
 
 
 // ==========================================
-// 1. API CONNECTION
+// 1. DATE HELPERS
+// ==========================================
+
+// Get today's date using the computer's local timezone.
+function getLocalDate() {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
+function formatDate(dateValue) {
+    if (!dateValue) return "";
+
+    const parts = dateValue.split("-");
+
+    if (parts.length !== 3) return dateValue;
+
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+
+// ==========================================
+// 2. API CONNECTION
 // ==========================================
 
 async function apiRequest(endpoint, options = {}) {
     const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers: {
-            ...(options.body ? { "Content-Type": "application/json" } : {}),
+            ...(options.body
+                ? { "Content-Type": "application/json" }
+                : {}),
             ...options.headers
         }
     });
@@ -32,7 +58,9 @@ async function apiRequest(endpoint, options = {}) {
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok || result.success === false) {
-        throw new Error(result.message || `Request failed: ${response.status}`);
+        throw new Error(
+            result.message || `Request failed: ${response.status}`
+        );
     }
 
     return result;
@@ -40,7 +68,7 @@ async function apiRequest(endpoint, options = {}) {
 
 
 // ==========================================
-// 2. MESSAGE DISPLAY
+// 3. MESSAGE DISPLAY
 // ==========================================
 
 function showMessage(message, type = "success") {
@@ -62,7 +90,7 @@ function showMessage(message, type = "success") {
 
 
 // ==========================================
-// 3. NAVIGATION
+// 4. NAVIGATION
 // ==========================================
 
 function showPage(pageName) {
@@ -83,15 +111,13 @@ function showPage(pageName) {
         );
     });
 
-    const pageNameElement = $("page-name");
-
-    if (pageNameElement) {
-        pageNameElement.textContent =
+    if ($("page-name")) {
+        $("page-name").textContent =
             pageName.charAt(0).toUpperCase() + pageName.slice(1);
     }
 
     if (pageName === "dashboard") {
-        refreshApp();
+        updateDashboard();
     }
 
     if (pageName === "profile") {
@@ -99,11 +125,11 @@ function showPage(pageName) {
     }
 
     if (pageName === "feeding") {
-        loadFeeding();
+        renderFeeding();
     }
 
     if (pageName === "water") {
-        loadWater();
+        renderWater();
     }
 
     if (pageName === "wellness") {
@@ -112,14 +138,22 @@ function showPage(pageName) {
 }
 
 document.querySelectorAll(".nav-link").forEach(link => {
-    link.addEventListener("click", () => {
+    link.addEventListener("click", event => {
+        event.preventDefault();
         showPage(link.dataset.page);
+    });
+});
+
+// Also support buttons with data-page.
+document.querySelectorAll("[data-page]").forEach(button => {
+    button.addEventListener("click", () => {
+        showPage(button.dataset.page);
     });
 });
 
 
 // ==========================================
-// 4. CAT PROFILE
+// 5. CAT PROFILE
 // ==========================================
 
 async function loadCat() {
@@ -135,6 +169,7 @@ async function loadCat() {
         displayCatProfile();
 
         return catProfile;
+
     } catch (error) {
         showMessage(error.message, "error");
         throw error;
@@ -144,19 +179,6 @@ async function loadCat() {
 
 function displayCatProfile() {
     if (!catProfile) return;
-
-    if ($("profile-name")) {
-        $("profile-name").textContent = catProfile.name;
-    }
-
-    if ($("profile-age")) {
-        $("profile-age").textContent = catProfile.age;
-    }
-
-    if ($("profile-weight")) {
-        $("profile-weight").textContent =
-            `${catProfile.weightKg} kg`;
-    }
 
     if ($("cat-name")) {
         $("cat-name").value = catProfile.name || "";
@@ -185,20 +207,28 @@ function displayCatProfile() {
 }
 
 
-// Update cat profile
+// Update cat profile.
 if ($("profile-form")) {
     $("profile-form").addEventListener("submit", async event => {
         event.preventDefault();
 
+        const form = event.currentTarget;
+
         const input = {
-            name: $("cat-name").value.trim(),
-            age: Number($("cat-age").value),
-            weightKg: Number($("cat-weight").value),
-            favoriteFood: $("cat-food").value.trim(),
-            activity: $("cat-activity").value.trim()
+            name: form.elements.name.value.trim(),
+            age: Number(form.elements.age.value),
+            weightKg: Number(form.elements.weightKg.value),
+            favoriteFood: form.elements.favoriteFood.value.trim(),
+            activity: form.elements.activity.value.trim()
         };
 
-        if (!input.name || input.age < 0 || input.weightKg <= 0) {
+        if (
+            !input.name ||
+            !Number.isFinite(input.age) ||
+            input.age < 0 ||
+            !Number.isFinite(input.weightKg) ||
+            input.weightKg <= 0
+        ) {
             showMessage("Please enter valid cat information.", "error");
             return;
         }
@@ -212,6 +242,7 @@ if ($("profile-form")) {
             await loadCat();
 
             showMessage("Cat profile updated successfully!");
+
         } catch (error) {
             showMessage(error.message, "error");
         }
@@ -220,9 +251,11 @@ if ($("profile-form")) {
 
 
 // ==========================================
-// 5. FEEDING TRACKER
+// 6. FEEDING TRACKER
 // ==========================================
 
+// Load all feeding records.
+// Date filtering is performed in the browser.
 async function loadFeeding() {
     try {
         const result = await apiRequest("/api/feeding");
@@ -233,6 +266,7 @@ async function loadFeeding() {
         updateDashboard();
 
         return feedingRecords;
+
     } catch (error) {
         showMessage(error.message, "error");
         throw error;
@@ -240,6 +274,21 @@ async function loadFeeding() {
 }
 
 
+// Get feeding records for the selected filter date.
+function getFilteredFeeding() {
+    const selectedDate = $("feeding-date-filter")?.value;
+
+    if (!selectedDate) {
+        return feedingRecords;
+    }
+
+    return feedingRecords.filter(
+        record => record.recordDate === selectedDate
+    );
+}
+
+
+// Display feeding table.
 function renderFeeding() {
     const table = $("feeding-table");
 
@@ -247,28 +296,37 @@ function renderFeeding() {
 
     table.innerHTML = "";
 
-    if (feedingRecords.length === 0) {
+    const records = getFilteredFeeding();
+
+    if (records.length === 0) {
         table.innerHTML = `
             <tr>
-                <td colspan="5">No feeding records found.</td>
+                <td colspan="7">No feeding records found.</td>
             </tr>
         `;
         return;
     }
 
-    feedingRecords.forEach(record => {
+    const sortedRecords = [...records].sort((a, b) =>
+        (b.recordDate || "").localeCompare(a.recordDate || "") ||
+        b.id - a.id
+    );
+
+    sortedRecords.forEach(record => {
         const row = document.createElement("tr");
 
         const values = [
+            record.id,
             record.foodName,
             `${record.quantityGrams} g`,
             record.mealTime,
+            formatDate(record.recordDate),
             record.notes || ""
         ];
 
         values.forEach(value => {
             const cell = document.createElement("td");
-            cell.textContent = value ?? "";
+            cell.textContent = String(value ?? "");
             row.appendChild(cell);
         });
 
@@ -277,12 +335,16 @@ function renderFeeding() {
         const editButton = document.createElement("button");
         editButton.textContent = "Edit";
         editButton.type = "button";
-        editButton.addEventListener("click", () => editFeeding(record.id));
+        editButton.addEventListener("click", () => {
+            editFeeding(record.id);
+        });
 
         const deleteButton = document.createElement("button");
         deleteButton.textContent = "Delete";
         deleteButton.type = "button";
-        deleteButton.addEventListener("click", () => deleteFeeding(record.id));
+        deleteButton.addEventListener("click", () => {
+            deleteFeeding(record.id);
+        });
 
         actions.append(editButton, deleteButton);
         row.appendChild(actions);
@@ -292,7 +354,7 @@ function renderFeeding() {
 }
 
 
-// Add feeding record
+// Add feeding record.
 if ($("feeding-form")) {
     $("feeding-form").addEventListener("submit", async event => {
         event.preventDefault();
@@ -300,6 +362,7 @@ if ($("feeding-form")) {
         const form = event.currentTarget;
 
         const input = {
+            recordDate: form.elements.recordDate.value,
             foodName: form.elements.foodName.value.trim(),
             quantityGrams: Number(form.elements.quantityGrams.value),
             mealTime: form.elements.mealTime.value,
@@ -307,6 +370,7 @@ if ($("feeding-form")) {
         };
 
         if (
+            !input.recordDate ||
             !input.foodName ||
             !Number.isFinite(input.quantityGrams) ||
             input.quantityGrams <= 0 ||
@@ -329,6 +393,7 @@ if ($("feeding-form")) {
             await loadFeeding();
 
             showMessage("Feeding record saved successfully!");
+
         } catch (error) {
             showMessage(error.message, "error");
         }
@@ -336,25 +401,49 @@ if ($("feeding-form")) {
 }
 
 
-// Edit feeding record
+// Edit feeding record, including its date.
 async function editFeeding(id) {
     const record = feedingRecords.find(item => item.id === id);
 
     if (!record) return;
 
-    const foodName = prompt("Food name:", record.foodName);
+    const recordDate = prompt(
+        "Record date (YYYY-MM-DD):",
+        record.recordDate
+    );
+
+    if (recordDate === null) return;
+
+    const foodName = prompt(
+        "Food name:",
+        record.foodName
+    );
+
     if (foodName === null) return;
 
-    const quantity = prompt("Quantity in grams:", record.quantityGrams);
+    const quantity = prompt(
+        "Quantity in grams:",
+        record.quantityGrams
+    );
+
     if (quantity === null) return;
 
-    const mealTime = prompt("Meal time:", record.mealTime);
+    const mealTime = prompt(
+        "Meal time:",
+        record.mealTime
+    );
+
     if (mealTime === null) return;
 
-    const notes = prompt("Notes:", record.notes || "");
+    const notes = prompt(
+        "Notes:",
+        record.notes || ""
+    );
+
     if (notes === null) return;
 
     const input = {
+        recordDate: recordDate.trim(),
         foodName: foodName.trim(),
         quantityGrams: Number(quantity),
         mealTime: mealTime.trim(),
@@ -362,6 +451,7 @@ async function editFeeding(id) {
     };
 
     if (
+        !input.recordDate ||
         !input.foodName ||
         !Number.isFinite(input.quantityGrams) ||
         input.quantityGrams <= 0 ||
@@ -379,14 +469,15 @@ async function editFeeding(id) {
 
         await loadFeeding();
 
-        showMessage("Feeding record updated!");
+        showMessage("Feeding record updated successfully!");
+
     } catch (error) {
         showMessage(error.message, "error");
     }
 }
 
 
-// Delete feeding record
+// Delete feeding record.
 async function deleteFeeding(id) {
     if (!confirm("Are you sure you want to delete this feeding record?")) {
         return;
@@ -400,14 +491,28 @@ async function deleteFeeding(id) {
         await loadFeeding();
 
         showMessage("Feeding record deleted!");
+
     } catch (error) {
         showMessage(error.message, "error");
     }
 }
 
 
+// Feeding date filter.
+if ($("feeding-date-filter")) {
+    $("feeding-date-filter").addEventListener("change", renderFeeding);
+}
+
+if ($("feeding-clear-filter")) {
+    $("feeding-clear-filter").addEventListener("click", () => {
+        $("feeding-date-filter").value = "";
+        renderFeeding();
+    });
+}
+
+
 // ==========================================
-// 6. WATER TRACKER
+// 7. WATER TRACKER
 // ==========================================
 
 async function loadWater() {
@@ -420,6 +525,7 @@ async function loadWater() {
         updateDashboard();
 
         return waterRecords;
+
     } catch (error) {
         showMessage(error.message, "error");
         throw error;
@@ -427,6 +533,21 @@ async function loadWater() {
 }
 
 
+// Filter water records by selected date.
+function getFilteredWater() {
+    const selectedDate = $("water-date-filter")?.value;
+
+    if (!selectedDate) {
+        return waterRecords;
+    }
+
+    return waterRecords.filter(
+        record => record.recordDate === selectedDate
+    );
+}
+
+
+// Display water table and totals.
 function renderWater() {
     const table = $("water-table");
 
@@ -434,70 +555,92 @@ function renderWater() {
 
     table.innerHTML = "";
 
-    if (waterRecords.length === 0) {
+    const records = getFilteredWater();
+
+    if (records.length === 0) {
         table.innerHTML = `
             <tr>
-                <td colspan="5">No water records found.</td>
+                <td colspan="7">No water records found.</td>
             </tr>
         `;
-        return;
+    } else {
+        const sortedRecords = [...records].sort((a, b) =>
+            (b.recordDate || "").localeCompare(a.recordDate || "") ||
+            b.id - a.id
+        );
+
+        sortedRecords.forEach(record => {
+            const row = document.createElement("tr");
+
+            const values = [
+                record.id,
+                `${record.offeredMl} ml`,
+                record.measured
+                    ? `${record.consumedMl} ml`
+                    : "Not measured",
+                record.measured ? "Yes" : "No",
+                formatDate(record.recordDate),
+                record.notes || ""
+            ];
+
+            values.forEach(value => {
+                const cell = document.createElement("td");
+                cell.textContent = String(value ?? "");
+                row.appendChild(cell);
+            });
+
+            const actions = document.createElement("td");
+
+            const editButton = document.createElement("button");
+            editButton.textContent = "Edit";
+            editButton.type = "button";
+            editButton.addEventListener("click", () => {
+                editWater(record.id);
+            });
+
+            const deleteButton = document.createElement("button");
+            deleteButton.textContent = "Delete";
+            deleteButton.type = "button";
+            deleteButton.addEventListener("click", () => {
+                deleteWater(record.id);
+            });
+
+            actions.append(editButton, deleteButton);
+            row.appendChild(actions);
+
+            table.appendChild(row);
+        });
     }
 
-    waterRecords.forEach(record => {
-        const row = document.createElement("tr");
-
-        const values = [
-            `${record.offeredMl} ml`,
-            record.measured ? `${record.consumedMl} ml` : "Not measured",
-            record.measured ? "Yes" : "No",
-            record.notes || ""
-        ];
-
-        values.forEach(value => {
-            const cell = document.createElement("td");
-            cell.textContent = value ?? "";
-            row.appendChild(cell);
-        });
-
-        const actions = document.createElement("td");
-
-        const editButton = document.createElement("button");
-        editButton.textContent = "Edit";
-        editButton.type = "button";
-        editButton.addEventListener("click", () => editWater(record.id));
-
-        const deleteButton = document.createElement("button");
-        deleteButton.textContent = "Delete";
-        deleteButton.type = "button";
-        deleteButton.addEventListener("click", () => deleteWater(record.id));
-
-        actions.append(editButton, deleteButton);
-        row.appendChild(actions);
-
-        table.appendChild(row);
-    });
-
-    const totalOffered = waterRecords.reduce(
-        (sum, record) => sum + Number(record.offeredMl || 0), 0
+    // Calculate totals using only currently filtered records.
+    const totalOffered = records.reduce(
+        (sum, record) => sum + Number(record.offeredMl || 0),
+        0
     );
 
-    const totalConsumed = waterRecords.reduce(
+    const totalConsumed = records.reduce(
         (sum, record) =>
-            sum + (record.measured ? Number(record.consumedMl || 0) : 0),
+            sum + (
+                record.measured
+                    ? Number(record.consumedMl || 0)
+                    : 0
+            ),
         0
     );
 
     if ($("water-total-offered")) {
-        $("water-total-offered").textContent = `${totalOffered} ml`;
+        $("water-total-offered").textContent =
+            `${totalOffered} ml`;
     }
 
     if ($("water-total-consumed")) {
-        $("water-total-consumed").textContent = `${totalConsumed} ml`;
+        $("water-total-consumed").textContent =
+            `${totalConsumed} ml`;
     }
 }
 
 
-// Add water record
+// Add water record.
 if ($("water-form")) {
     $("water-form").addEventListener("submit", async event => {
         event.preventDefault();
@@ -507,6 +650,7 @@ if ($("water-form")) {
         const measured = form.elements.measured.value === "true";
 
         const input = {
+            recordDate: form.elements.recordDate.value,
             offeredMl: Number(form.elements.offeredMl.value),
             measured,
             consumedMl: measured
@@ -516,12 +660,15 @@ if ($("water-form")) {
         };
 
         if (
+            !input.recordDate ||
             !Number.isFinite(input.offeredMl) ||
             input.offeredMl < 0 ||
             (
                 measured &&
-                (!Number.isFinite(input.consumedMl) ||
-                 input.consumedMl < 0)
+                (
+                    !Number.isFinite(input.consumedMl) ||
+                    input.consumedMl < 0
+                )
             )
         ) {
             showMessage("Please enter valid water information.", "error");
@@ -541,6 +688,7 @@ if ($("water-form")) {
             await loadWater();
 
             showMessage("Water record saved successfully!");
+
         } catch (error) {
             showMessage(error.message, "error");
         }
@@ -548,16 +696,29 @@ if ($("water-form")) {
 }
 
 
-// Edit water record
+// Edit water record, including its date.
 async function editWater(id) {
     const record = waterRecords.find(item => item.id === id);
 
     if (!record) return;
 
-    const offered = prompt("Water offered (ml):", record.offeredMl);
+    const recordDate = prompt(
+        "Record date (YYYY-MM-DD):",
+        record.recordDate
+    );
+
+    if (recordDate === null) return;
+
+    const offered = prompt(
+        "Water offered (ml):",
+        record.offeredMl
+    );
+
     if (offered === null) return;
 
-    const measured = confirm("Do you have a measured consumption value?");
+    const measured = confirm(
+        "Do you have a measured consumption value?"
+    );
 
     let consumed = null;
 
@@ -572,10 +733,15 @@ async function editWater(id) {
         consumed = Number(consumed);
     }
 
-    const notes = prompt("Notes:", record.notes || "");
+    const notes = prompt(
+        "Notes:",
+        record.notes || ""
+    );
+
     if (notes === null) return;
 
     const input = {
+        recordDate: recordDate.trim(),
         offeredMl: Number(offered),
         measured,
         consumedMl: measured ? consumed : null,
@@ -583,9 +749,13 @@ async function editWater(id) {
     };
 
     if (
+        !input.recordDate ||
         !Number.isFinite(input.offeredMl) ||
         input.offeredMl < 0 ||
-        (measured && (!Number.isFinite(consumed) || consumed < 0))
+        (
+            measured &&
+            (!Number.isFinite(consumed) || consumed < 0)
+        )
     ) {
         showMessage("Invalid water information.", "error");
         return;
@@ -599,14 +769,15 @@ async function editWater(id) {
 
         await loadWater();
 
-        showMessage("Water record updated!");
+        showMessage("Water record updated successfully!");
+
     } catch (error) {
         showMessage(error.message, "error");
     }
 }
 
 
-// Delete water record
+// Delete water record.
 async function deleteWater(id) {
     if (!confirm("Are you sure you want to delete this water record?")) {
         return;
@@ -620,53 +791,61 @@ async function deleteWater(id) {
         await loadWater();
 
         showMessage("Water record deleted!");
+
     } catch (error) {
         showMessage(error.message, "error");
     }
 }
 
 
-// ==========================================
-// 7. DASHBOARD
-// ==========================================
+// Water date filter.
+if ($("water-date-filter")) {
+    $("water-date-filter").addEventListener("change", renderWater);
+}
 
-function isToday(dateValue) {
-    if (!dateValue) return false;
-
-    const date = new Date(dateValue);
-
-    const today = new Date();
-
-    return (
-        date.getFullYear() === today.getFullYear() &&
-        date.getMonth() === today.getMonth() &&
-        date.getDate() === today.getDate()
-    );
+if ($("water-clear-filter")) {
+    $("water-clear-filter").addEventListener("click", () => {
+        $("water-date-filter").value = "";
+        renderWater();
+    });
 }
 
 
+// ==========================================
+// 8. DASHBOARD
+// ==========================================
+
 function updateDashboard() {
-    const todayFeeding = feedingRecords.filter(
-        record => isToday(record.createdAt)
+    const selectedDate =
+        $("dashboard-date-filter")?.value || getLocalDate();
+
+    const selectedFeeding = feedingRecords.filter(
+        record => record.recordDate === selectedDate
     );
 
-    const todayWater = waterRecords.filter(
-        record => isToday(record.createdAt)
+    const selectedWater = waterRecords.filter(
+        record => record.recordDate === selectedDate
     );
 
-    const foodTotal = todayFeeding.reduce(
-        (sum, record) => sum + Number(record.quantityGrams || 0),
-        0
-    );
-
-    const waterOffered = todayWater.reduce(
-        (sum, record) => sum + Number(record.offeredMl || 0),
-        0
-    );
-
-    const waterConsumed = todayWater.reduce(
+    const foodTotal = selectedFeeding.reduce(
         (sum, record) =>
-            sum + (record.measured ? Number(record.consumedMl || 0) : 0),
+            sum + Number(record.quantityGrams || 0),
+        0
+    );
+
+    const waterOffered = selectedWater.reduce(
+        (sum, record) =>
+            sum + Number(record.offeredMl || 0),
+        0
+    );
+
+    const waterConsumed = selectedWater.reduce(
+        (sum, record) =>
+            sum + (
+                record.measured
+                    ? Number(record.consumedMl || 0)
+                    : 0
+            ),
         0
     );
 
@@ -675,7 +854,8 @@ function updateDashboard() {
     }
 
     if ($("stat-feeding-count")) {
-        $("stat-feeding-count").textContent = todayFeeding.length;
+        $("stat-feeding-count").textContent =
+            selectedFeeding.length;
     }
 
     if ($("stat-water")) {
@@ -683,7 +863,8 @@ function updateDashboard() {
     }
 
     if ($("stat-water-count")) {
-        $("stat-water-count").textContent = todayWater.length;
+        $("stat-water-count").textContent =
+            selectedWater.length;
     }
 
     if ($("stat-consumed")) {
@@ -691,18 +872,20 @@ function updateDashboard() {
     }
 
     if (catProfile && $("stat-weight")) {
-        $("stat-weight").textContent = `${catProfile.weightKg} kg`;
+        $("stat-weight").textContent =
+            `${catProfile.weightKg} kg`;
     }
 
     if ($("dashboard-date")) {
         $("dashboard-date").textContent =
-            new Date().toLocaleDateString();
+            `Showing records for ${formatDate(selectedDate)}`;
     }
 
-    renderRecentFeeding(todayFeeding);
+    renderRecentFeeding(selectedFeeding);
 }
 
 
+// Show the five most recent feeding records for selected date.
 function renderRecentFeeding(records) {
     const container = $("recent-feeding");
 
@@ -711,28 +894,55 @@ function renderRecentFeeding(records) {
     container.innerHTML = "";
 
     if (records.length === 0) {
-        container.textContent = "No feeding activity recorded today.";
+        container.innerHTML = `
+            <tr>
+                <td colspan="4">No feeding activity for this date.</td>
+            </tr>
+        `;
         return;
     }
 
-    records.slice(-5).reverse().forEach(record => {
-        const item = document.createElement("p");
+    const recentRecords = [...records]
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 5);
 
-        item.textContent =
-            `${record.foodName} — ${record.quantityGrams} g (${record.mealTime})`;
+    recentRecords.forEach(record => {
+        const row = document.createElement("tr");
 
-        container.appendChild(item);
+        const values = [
+            record.foodName,
+            `${record.quantityGrams} g`,
+            record.mealTime,
+            formatDate(record.recordDate)
+        ];
+
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = String(value ?? "");
+            row.appendChild(cell);
+        });
+
+        container.appendChild(row);
     });
 }
 
 
+// Dashboard date selection.
+if ($("dashboard-date-filter")) {
+    $("dashboard-date-filter").addEventListener(
+        "change",
+        updateDashboard
+    );
+}
+
+
 // ==========================================
-// 8. WELLNESS REPORT
+// 9. WELLNESS REPORT
 // ==========================================
 
 async function loadWellness() {
-    const date = $("wellness-date")?.value ||
-        new Date().toISOString().slice(0, 10);
+    const date =
+        $("wellness-date")?.value || getLocalDate();
 
     try {
         const result = await apiRequest(
@@ -744,6 +954,7 @@ async function loadWellness() {
         renderWellness(report);
 
         return report;
+
     } catch (error) {
         showMessage(error.message, "error");
         throw error;
@@ -768,7 +979,7 @@ function renderWellness(report) {
     container.innerHTML = "";
 
     const details = [
-        ["Date", report.date || ""],
+        ["Date", formatDate(report.date)],
         ["Cat", cat.name || "Not available"],
         ["Food records", feeding.totalRecords ?? 0],
         ["Total food", `${feeding.totalGrams ?? 0} g`],
@@ -786,7 +997,10 @@ function renderWellness(report) {
         const strong = document.createElement("strong");
         strong.textContent = `${label}: `;
 
-        item.append(strong, document.createTextNode(String(value)));
+        item.append(
+            strong,
+            document.createTextNode(String(value))
+        );
 
         container.appendChild(item);
     });
@@ -799,14 +1013,25 @@ if ($("wellness-date")) {
 
 
 // ==========================================
-// 9. MODAL HELPERS
+// 10. MODAL HELPERS
 // ==========================================
 
 function openModal(id) {
     const modal = $(id);
 
-    if (modal) {
-        modal.style.display = "flex";
+    if (!modal) return;
+
+    modal.style.display = "flex";
+
+    // Set the form date when opening a new record form.
+    if (id === "feeding-modal" && $("feeding-record-date")) {
+        $("feeding-record-date").value =
+            $("dashboard-date-filter")?.value || getLocalDate();
+    }
+
+    if (id === "water-modal" && $("water-record-date")) {
+        $("water-record-date").value =
+            $("dashboard-date-filter")?.value || getLocalDate();
     }
 }
 
@@ -820,13 +1045,15 @@ function closeModal(id) {
 }
 
 
-// Connect buttons with modal IDs
+// Open modal buttons.
 document.querySelectorAll("[data-open-modal]").forEach(button => {
     button.addEventListener("click", () => {
         openModal(button.dataset.openModal);
     });
 });
 
+
+// Close modal buttons.
 document.querySelectorAll("[data-close-modal]").forEach(button => {
     button.addEventListener("click", () => {
         closeModal(button.dataset.closeModal);
@@ -835,7 +1062,7 @@ document.querySelectorAll("[data-close-modal]").forEach(button => {
 
 
 // ==========================================
-// 10. REFRESH APPLICATION
+// 11. REFRESH APPLICATION
 // ==========================================
 
 async function refreshApp() {
@@ -857,6 +1084,7 @@ async function refreshApp() {
         if (status) {
             status.textContent = "Connected";
         }
+
     } catch (error) {
         if (status) {
             status.textContent = "Connection error";
@@ -873,18 +1101,26 @@ if ($("refresh-btn")) {
 
 
 // ==========================================
-// 11. START APPLICATION
+// 12. START APPLICATION
 // ==========================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-    if ($("dashboard-date")) {
-        $("dashboard-date").textContent =
-            new Date().toLocaleDateString();
+    const today = getLocalDate();
+
+    if ($("dashboard-date-filter")) {
+        $("dashboard-date-filter").value = today;
     }
 
     if ($("wellness-date")) {
-        $("wellness-date").value =
-            new Date().toISOString().slice(0, 10);
+        $("wellness-date").value = today;
+    }
+
+    if ($("feeding-record-date")) {
+        $("feeding-record-date").value = today;
+    }
+
+    if ($("water-record-date")) {
+        $("water-record-date").value = today;
     }
 
     await refreshApp();

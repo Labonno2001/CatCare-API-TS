@@ -68,13 +68,21 @@
             <div class="welcome-section">
                 <h2>Welcome to CatCare Hub! 🐾</h2>
                 <p>Keep track of your cat's daily care and wellness.</p>
+
+                <div class="form-group">
+                    <label for="dashboard-date-filter">
+                        Select Dashboard Date
+                    </label>
+                    <input type="date" id="dashboard-date-filter">
+                </div>
+
                 <p id="dashboard-date"></p>
             </div>
 
             <div class="stats-grid">
 
                 <div class="stat-card">
-                    <h3>Today's Food</h3>
+                    <h3>Food Consumed</h3>
                     <h2 id="stat-food">0 g</h2>
                     <p>Total food consumed</p>
                 </div>
@@ -82,19 +90,19 @@
                 <div class="stat-card">
                     <h3>Feeding Sessions</h3>
                     <h2 id="stat-feeding-count">0</h2>
-                    <p>Today's meals</p>
+                    <p>Meals recorded</p>
                 </div>
 
                 <div class="stat-card">
                     <h3>Water Offered</h3>
                     <h2 id="stat-water">0 ml</h2>
-                    <p>Today's water offered</p>
+                    <p>Total water offered</p>
                 </div>
 
                 <div class="stat-card">
                     <h3>Water Records</h3>
                     <h2 id="stat-water-count">0</h2>
-                    <p>Today's records</p>
+                    <p>Water records</p>
                 </div>
 
                 <div class="stat-card">
@@ -114,8 +122,10 @@
 
             <!-- RECENT FEEDING -->
             <div class="content-card">
+
                 <div class="section-heading">
-                    <h2>Recent Feeding Records</h2>
+                    <h2>Feeding Records</h2>
+
                     <button type="button" data-page="feeding">
                         View All
                     </button>
@@ -139,6 +149,7 @@
                         </tbody>
                     </table>
                 </div>
+
             </div>
 
         </section>
@@ -149,6 +160,7 @@
         <section id="profile-page" class="page">
 
             <div class="content-card">
+
                 <h2>🐱 Cat Profile</h2>
                 <p>View and update your cat's personal information.</p>
 
@@ -213,6 +225,7 @@
                     <button type="submit">Update Cat Profile</button>
 
                 </form>
+
             </div>
 
         </section>
@@ -235,6 +248,23 @@
                     </button>
                 </div>
 
+
+                <!-- FEEDING DATE FILTER -->
+                <div class="form-group">
+                    <label for="feeding-date-filter">
+                        Filter Feeding Records by Date
+                    </label>
+
+                    <div class="date-filter">
+                        <input type="date" id="feeding-date-filter">
+
+                        <button type="button" id="feeding-clear-filter">
+                            Show All Records
+                        </button>
+                    </div>
+                </div>
+
+
                 <div class="table-container">
                     <table>
                         <thead>
@@ -243,6 +273,7 @@
                                 <th>Food Name</th>
                                 <th>Quantity (g)</th>
                                 <th>Meal Time</th>
+                                <th>Date</th>
                                 <th>Notes</th>
                                 <th>Actions</th>
                             </tr>
@@ -250,7 +281,7 @@
 
                         <tbody id="feeding-table">
                             <tr>
-                                <td colspan="6">Loading feeding records...</td>
+                                <td colspan="7">Loading feeding records...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -279,6 +310,23 @@
                 </div>
 
 
+                <!-- WATER DATE FILTER -->
+                <div class="form-group">
+                    <label for="water-date-filter">
+                        Filter Water Records by Date
+                    </label>
+
+                    <div class="date-filter">
+                        <input type="date" id="water-date-filter">
+
+                        <button type="button" id="water-clear-filter">
+                            Show All Records
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- WATER SUMMARY -->
                 <div class="stats-grid">
 
                     <div class="stat-card">
@@ -294,6 +342,7 @@
                 </div>
 
 
+                <!-- WATER TABLE -->
                 <div class="table-container">
                     <table>
                         <thead>
@@ -302,6 +351,7 @@
                                 <th>Offered (ml)</th>
                                 <th>Consumed (ml)</th>
                                 <th>Measured</th>
+                                <th>Date</th>
                                 <th>Notes</th>
                                 <th>Actions</th>
                             </tr>
@@ -309,7 +359,7 @@
 
                         <tbody id="water-table">
                             <tr>
-                                <td colspan="6">Loading water records...</td>
+                                <td colspan="7">Loading water records...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -365,6 +415,16 @@
             </div>
 
             <form id="feeding-form">
+
+                <div class="form-group">
+                    <label for="feeding-record-date">Record Date</label>
+                    <input
+                        type="date"
+                        id="feeding-record-date"
+                        name="recordDate"
+                        required
+                    >
+                </div>
 
                 <div class="form-group">
                     <label>Food Name</label>
@@ -431,6 +491,16 @@
             </div>
 
             <form id="water-form">
+
+                <div class="form-group">
+                    <label for="water-record-date">Record Date</label>
+                    <input
+                        type="date"
+                        id="water-record-date"
+                        name="recordDate"
+                        required
+                    >
+                </div>
 
                 <div class="form-group">
                     <label>Water Offered (ml)</label>

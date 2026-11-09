@@ -1,4 +1,3 @@
-
 import { Request, Response } from "express";
 
 import {
@@ -10,16 +9,31 @@ import {
     deleteFeedingRecord
 } from "../services/feeding.service";
 
-// Define the accepted request body structure
 interface FeedingInputBody {
     foodName: string;
     quantityGrams: number | string;
     mealTime: string;
     notes?: string;
+    recordDate: string;
 }
 
-// Safely check whether an unknown value is a valid feeding request
-const isValidFeedingInput = (body: unknown): body is FeedingInputBody => {
+// Validate YYYY-MM-DD and reject impossible dates
+const isValidDate = (date: unknown): date is string => {
+    if (typeof date !== "string") return false;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+
+    const parsed = new Date(`${date}T00:00:00.000Z`);
+
+    return (
+        !Number.isNaN(parsed.getTime()) &&
+        parsed.toISOString().slice(0, 10) === date
+    );
+};
+
+const isValidFeedingInput = (
+    body: unknown
+): body is FeedingInputBody => {
     if (
         typeof body !== "object" ||
         body === null ||
@@ -42,25 +56,36 @@ const isValidFeedingInput = (body: unknown): body is FeedingInputBody => {
         validQuantity &&
         typeof input.mealTime === "string" &&
         input.mealTime.trim().length > 0 &&
-        (input.notes === undefined || typeof input.notes === "string")
+        (input.notes === undefined ||
+            typeof input.notes === "string") &&
+        isValidDate(input.recordDate)
     );
 };
 
 const isValidId = (id: string | string[]): boolean => {
-    if (typeof id !== "string") {
-        return false;
-    }
+    if (typeof id !== "string") return false;
 
     const numericId = Number(id);
 
     return Number.isInteger(numericId) && numericId > 0;
 };
-// 1. GET all feeding records
+
+// GET all feeding records, optionally filtered by date
 export const getAllFeedingRecordsController = (
-    _req: Request,
+    req: Request,
     res: Response
 ): void => {
-    const records = getAllFeedingRecords();
+    const date = req.query.date;
+
+    if (date !== undefined && !isValidDate(date)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid date. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    const records = getAllFeedingRecords(date as string | undefined);
 
     res.status(200).json({
         success: true,
@@ -69,7 +94,7 @@ export const getAllFeedingRecordsController = (
     });
 };
 
-// 2. POST a feeding record
+// POST a feeding record
 export const createFeedingRecordController = (
     req: Request,
     res: Response
@@ -77,18 +102,25 @@ export const createFeedingRecordController = (
     if (!isValidFeedingInput(req.body)) {
         res.status(400).json({
             success: false,
-            message: "Please enter valid feeding details."
+            message: "Please enter valid feeding details, including a valid record date."
         });
         return;
     }
 
-    const { foodName, quantityGrams, mealTime, notes = "" } = req.body;
+    const {
+        foodName,
+        quantityGrams,
+        mealTime,
+        notes = "",
+        recordDate
+    } = req.body;
 
     const record = createFeedingRecord({
         foodName,
         quantityGrams: Number(quantityGrams),
         mealTime,
-        notes
+        notes,
+        recordDate
     });
 
     res.status(201).json({
@@ -98,12 +130,22 @@ export const createFeedingRecordController = (
     });
 };
 
-// 3. GET feeding summary
+// GET feeding summary, optionally filtered by date
 export const getFeedingSummaryController = (
-    _req: Request,
+    req: Request,
     res: Response
 ): void => {
-    const summary = getFeedingSummary();
+    const date = req.query.date;
+
+    if (date !== undefined && !isValidDate(date)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid date. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    const summary = getFeedingSummary(date as string | undefined);
 
     res.status(200).json({
         success: true,
@@ -111,7 +153,7 @@ export const getFeedingSummaryController = (
     });
 };
 
-// 4. GET one feeding record by ID
+// GET one feeding record by ID
 export const getFeedingRecordByIdController = (
     req: Request,
     res: Response
@@ -140,12 +182,15 @@ export const getFeedingRecordByIdController = (
     });
 };
 
-// 5. PATCH a feeding record
+// PATCH a feeding record
 export const updateFeedingRecordController = (
     req: Request,
     res: Response
 ): void => {
-    if (!isValidId(req.params.id) || !isValidFeedingInput(req.body)) {
+    if (
+        !isValidId(req.params.id) ||
+        !isValidFeedingInput(req.body)
+    ) {
         res.status(400).json({
             success: false,
             message: "Please enter valid feeding details."
@@ -153,13 +198,20 @@ export const updateFeedingRecordController = (
         return;
     }
 
-    const { foodName, quantityGrams, mealTime, notes = "" } = req.body;
+    const {
+        foodName,
+        quantityGrams,
+        mealTime,
+        notes = "",
+        recordDate
+    } = req.body;
 
     const record = updateFeedingRecord(Number(req.params.id), {
         foodName,
         quantityGrams: Number(quantityGrams),
         mealTime,
-        notes
+        notes,
+        recordDate
     });
 
     if (!record) {
@@ -177,7 +229,7 @@ export const updateFeedingRecordController = (
     });
 };
 
-// 6. DELETE a feeding record
+// DELETE a feeding record
 export const deleteFeedingRecordController = (
     req: Request,
     res: Response

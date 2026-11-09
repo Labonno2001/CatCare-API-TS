@@ -1,10 +1,10 @@
-
 export interface WaterRecord {
     id: number;
     offeredMl: number;
     consumedMl: number | null;
     measured: boolean;
     notes: string;
+    recordDate: string;
     createdAt: string;
 }
 
@@ -14,6 +14,7 @@ export interface WaterDatabaseRow {
     consumed_ml: number | null;
     measured: number;
     notes: string;
+    record_date: string | null;
     created_at: string;
 }
 
@@ -22,4 +23,5 @@ export interface CreateWaterInput {
     consumedMl?: number | null;
     measured: boolean;
     notes?: string;
+    recordDate: string;
 }

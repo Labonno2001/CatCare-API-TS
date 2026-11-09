@@ -1,4 +1,3 @@
-
 import db from "../database/database";
 
 import {
@@ -7,7 +6,7 @@ import {
     CreateFeedingInput
 } from "../types/feeding.types";
 
-// Convert SQLite row into API response format
+// Convert a database row into the API response format
 const formatFeeding = (
     row: FeedingDatabaseRow
 ): FeedingRecord => {
@@ -17,33 +16,50 @@ const formatFeeding = (
         quantityGrams: row.quantity_grams,
         mealTime: row.meal_time,
         notes: row.notes,
+        recordDate: row.record_date ?? row.created_at.slice(0, 10),
         createdAt: row.created_at
     };
 };
 
-// 1. Get all feeding records
-export const getAllFeedingRecords = (): FeedingRecord[] => {
-    const rows = db
-        .prepare("SELECT * FROM feeding_records ORDER BY id ASC")
-        .all() as FeedingDatabaseRow[];
+// Get all feeding records, or filter by date
+export const getAllFeedingRecords = (
+    date?: string
+): FeedingRecord[] => {
+    const rows = date
+        ? db.prepare(`
+            SELECT * FROM feeding_records
+            WHERE record_date = ?
+            ORDER BY id ASC
+        `).all(date) as FeedingDatabaseRow[]
+        : db.prepare(`
+            SELECT * FROM feeding_records
+            ORDER BY record_date DESC, id ASC
+        `).all() as FeedingDatabaseRow[];
 
     return rows.map(formatFeeding);
 };
 
-// 2. Create a feeding record
+// Create a feeding record
 export const createFeedingRecord = (
     input: CreateFeedingInput
 ): FeedingRecord => {
     const result = db.prepare(`
-        INSERT INTO feeding_records
-            (food_name, quantity_grams, meal_time, notes, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO feeding_records (
+            food_name,
+            quantity_grams,
+            meal_time,
+            notes,
+            created_at,
+            record_date
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
     `).run(
         input.foodName.trim(),
         input.quantityGrams,
         input.mealTime,
         input.notes ?? "",
-        new Date().toISOString()
+        new Date().toISOString(),
+        input.recordDate
     );
 
     const row = db.prepare(
@@ -53,38 +69,48 @@ export const createFeedingRecord = (
     return formatFeeding(row);
 };
 
-// 3. Get feeding summary
-export const getFeedingSummary = (): {
+// Get feeding summary, optionally for one date
+export const getFeedingSummary = (
+    date?: string
+): {
     totalRecords: number;
     totalGrams: number;
 } => {
-    const summary = db.prepare(`
-        SELECT
-            COUNT(*) AS totalRecords,
-            COALESCE(SUM(quantity_grams), 0) AS totalGrams
-        FROM feeding_records
-    `).get() as {
+    const summary = date
+        ? db.prepare(`
+            SELECT
+                COUNT(*) AS totalRecords,
+                COALESCE(SUM(quantity_grams), 0) AS totalGrams
+            FROM feeding_records
+            WHERE record_date = ?
+        `).get(date)
+        : db.prepare(`
+            SELECT
+                COUNT(*) AS totalRecords,
+                COALESCE(SUM(quantity_grams), 0) AS totalGrams
+            FROM feeding_records
+        `).get();
+
+    return summary as {
         totalRecords: number;
         totalGrams: number;
     };
-
-    return summary;
 };
 
-// 4. Get one feeding record by ID
+// Get one feeding record by ID
 export const getFeedingRecordById = (
     id: number
 ): FeedingRecord | null => {
-    const row = db
-        .prepare("SELECT * FROM feeding_records WHERE id = ?")
-        .get(id) as FeedingDatabaseRow | undefined;
+    const row = db.prepare(
+        "SELECT * FROM feeding_records WHERE id = ?"
+    ).get(id) as FeedingDatabaseRow | undefined;
 
     if (!row) return null;
 
     return formatFeeding(row);
 };
 
-// 5. Update a feeding record
+// Update a feeding record, including its date
 export const updateFeedingRecord = (
     id: number,
     input: CreateFeedingInput
@@ -94,13 +120,15 @@ export const updateFeedingRecord = (
         SET food_name = ?,
             quantity_grams = ?,
             meal_time = ?,
-            notes = ?
+            notes = ?,
+            record_date = ?
         WHERE id = ?
     `).run(
         input.foodName.trim(),
         input.quantityGrams,
         input.mealTime,
         input.notes ?? "",
+        input.recordDate,
         id
     );
 
@@ -113,7 +141,7 @@ export const updateFeedingRecord = (
     return formatFeeding(row);
 };
 
-// 6. Delete a feeding record
+// Delete a feeding record
 export const deleteFeedingRecord = (
     id: number
 ): boolean => {

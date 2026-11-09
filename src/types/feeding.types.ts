@@ -4,6 +4,7 @@ export interface FeedingRecord {
     quantityGrams: number;
     mealTime: string;
     notes: string;
+    recordDate: string;
     createdAt: string;
 }
 
@@ -13,6 +14,7 @@ export interface FeedingDatabaseRow {
     quantity_grams: number;
     meal_time: string;
     notes: string;
+    record_date: string | null;
     created_at: string;
 }
 
@@ -21,4 +23,5 @@ export interface CreateFeedingInput {
     quantityGrams: number;
     mealTime: string;
     notes?: string;
+    recordDate: string;
 }

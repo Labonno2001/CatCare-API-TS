@@ -1,4 +1,3 @@
-
 import { Request, Response } from "express";
 
 import {
@@ -10,16 +9,30 @@ import {
     deleteWaterRecord
 } from "../services/water.service";
 
-// Define the accepted water request structure
 interface WaterInputBody {
     offeredMl: number | string;
     consumedMl?: number | string | null;
     measured: boolean;
     notes?: string;
+    recordDate: string;
 }
 
-// Safely validate an unknown request body
-const isValidWaterInput = (body: unknown): body is WaterInputBody => {
+const isValidDate = (date: unknown): date is string => {
+    if (typeof date !== "string") return false;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+
+    const parsed = new Date(`${date}T00:00:00.000Z`);
+
+    return (
+        !Number.isNaN(parsed.getTime()) &&
+        parsed.toISOString().slice(0, 10) === date
+    );
+};
+
+const isValidWaterInput = (
+    body: unknown
+): body is WaterInputBody => {
     if (
         typeof body !== "object" ||
         body === null ||
@@ -53,27 +66,35 @@ const isValidWaterInput = (body: unknown): body is WaterInputBody => {
         validOfferedMl &&
         typeof input.measured === "boolean" &&
         validNotes &&
-        validConsumedMl
+        validConsumedMl &&
+        isValidDate(input.recordDate)
     );
 };
 
-// Validate record ID
 const isValidId = (id: string | string[]): boolean => {
-    if (typeof id !== "string") {
-        return false;
-    }
+    if (typeof id !== "string") return false;
 
     const numericId = Number(id);
 
     return Number.isInteger(numericId) && numericId > 0;
 };
 
-// 1. GET all water records
+// GET all water records, optionally filtered by date
 export const getAllWaterRecordsController = (
-    _req: Request,
+    req: Request,
     res: Response
 ): void => {
-    const records = getAllWaterRecords();
+    const date = req.query.date;
+
+    if (date !== undefined && !isValidDate(date)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid date. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    const records = getAllWaterRecords(date as string | undefined);
 
     res.status(200).json({
         success: true,
@@ -82,7 +103,7 @@ export const getAllWaterRecordsController = (
     });
 };
 
-// 2. Create a water record
+// POST a water record
 export const createWaterRecordController = (
     req: Request,
     res: Response
@@ -90,7 +111,7 @@ export const createWaterRecordController = (
     if (!isValidWaterInput(req.body)) {
         res.status(400).json({
             success: false,
-            message: "Please enter valid water details."
+            message: "Please enter valid water details, including a valid record date."
         });
         return;
     }
@@ -99,14 +120,16 @@ export const createWaterRecordController = (
         offeredMl,
         consumedMl,
         measured,
-        notes = ""
+        notes = "",
+        recordDate
     } = req.body;
 
     const record = createWaterRecord({
         offeredMl: Number(offeredMl),
         consumedMl: measured ? Number(consumedMl) : null,
         measured,
-        notes
+        notes,
+        recordDate
     });
 
     res.status(201).json({
@@ -116,12 +139,22 @@ export const createWaterRecordController = (
     });
 };
 
-// 3. Get water records summary
+// GET water summary, optionally filtered by date
 export const getWaterSummaryController = (
-    _req: Request,
+    req: Request,
     res: Response
 ): void => {
-    const summary = getWaterSummary();
+    const date = req.query.date;
+
+    if (date !== undefined && !isValidDate(date)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid date. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    const summary = getWaterSummary(date as string | undefined);
 
     res.status(200).json({
         success: true,
@@ -129,7 +162,7 @@ export const getWaterSummaryController = (
     });
 };
 
-// 4. Get a water record by ID
+// GET one water record by ID
 export const getWaterRecordByIdController = (
     req: Request,
     res: Response
@@ -158,20 +191,15 @@ export const getWaterRecordByIdController = (
     });
 };
 
-// 5. Update a water record
+// PATCH a water record
 export const updateWaterRecordController = (
     req: Request,
     res: Response
 ): void => {
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid water record ID."
-        });
-        return;
-    }
-
-    if (!isValidWaterInput(req.body)) {
+    if (
+        !isValidId(req.params.id) ||
+        !isValidWaterInput(req.body)
+    ) {
         res.status(400).json({
             success: false,
             message: "Please enter valid water details."
@@ -183,14 +211,16 @@ export const updateWaterRecordController = (
         offeredMl,
         consumedMl,
         measured,
-        notes = ""
+        notes = "",
+        recordDate
     } = req.body;
 
     const record = updateWaterRecord(Number(req.params.id), {
         offeredMl: Number(offeredMl),
         consumedMl: measured ? Number(consumedMl) : null,
         measured,
-        notes
+        notes,
+        recordDate
     });
 
     if (!record) {
@@ -208,7 +238,7 @@ export const updateWaterRecordController = (
     });
 };
 
-// 6. Delete a water record
+// DELETE a water record
 export const deleteWaterRecordController = (
     req: Request,
     res: Response

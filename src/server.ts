@@ -2,6 +2,7 @@
 import express, { Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "node:path";
 
 import db from "./database/database";
 
@@ -10,10 +11,7 @@ import feedingRoutes from "./routes/feeding.routes";
 import waterRoutes from "./routes/water.routes";
 import wellnessRoutes from "./routes/wellness.routes";
 
-import {
-    notFoundHandler,
-    errorHandler
-} from "./middleware/error.middleware";
+import { errorHandler } from "./middleware/error.middleware";
 
 dotenv.config();
 
@@ -29,12 +27,14 @@ app.use("/api/feeding", feedingRoutes);
 app.use("/api/water", waterRoutes);
 app.use("/api/wellness", wellnessRoutes);
 
-// Root route
-app.get("/", (_req, res: Response) => {
-    res.status(200).json({
-        success: true,
-        message: "Welcome to CatCare API - TypeScript Version"
-    });
+// Serve frontend files from the public folder
+const publicPath = path.join(process.cwd(), "public");
+
+app.use(express.static(publicPath));
+
+// Root route - serves index.html
+app.get("/", (_req, res) => {
+    res.sendFile(path.join(publicPath, "index.html"));
 });
 
 // Health check
@@ -48,9 +48,14 @@ app.get("/api/health", (_req, res: Response) => {
 });
 
 // Handle unknown routes
-app.use(notFoundHandler);
+app.use((_req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "Route not found."
+    });
+});
 
-// Centralized error handler — must be last
+// Centralized error handler - must be last
 app.use(errorHandler);
 
 // Server configuration

@@ -1,0 +1,28 @@
+﻿# Dependencies
+node_modules/
+
+# Compiled output
+dist/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# SQLite database and local data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs and error files
+*.log
+dev-error.txt
+npm-debug.log*
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/

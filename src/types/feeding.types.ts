@@ -25,3 +25,5 @@ export interface CreateFeedingInput {
     notes?: string;
     recordDate: string;
 }
+// Fields allowed in a partial feeding update
+export type PatchFeedingInput = Partial<CreateFeedingInput>;

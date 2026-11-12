@@ -1,3 +1,4 @@
+
 import { Request, Response } from "express";
 
 import {
@@ -6,8 +7,17 @@ import {
     getFeedingSummary,
     getFeedingRecordById,
     updateFeedingRecord,
+    patchFeedingRecord,
     deleteFeedingRecord
 } from "../services/feeding.service";
+
+import { PatchFeedingInput } from "../types/feeding.types";
+
+import {
+    isValidDate,
+    isValidId
+} from "../utils/validation";
+
 
 interface FeedingInputBody {
     foodName: string;
@@ -17,23 +27,12 @@ interface FeedingInputBody {
     recordDate: string;
 }
 
-// Validate YYYY-MM-DD and reject impossible dates
-const isValidDate = (date: unknown): date is string => {
-    if (typeof date !== "string") return false;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-
-    const parsed = new Date(`${date}T00:00:00.000Z`);
-
-    return (
-        !Number.isNaN(parsed.getTime()) &&
-        parsed.toISOString().slice(0, 10) === date
-    );
-};
-
+// Validate a complete feeding record (PUT and POST)
 const isValidFeedingInput = (
     body: unknown
 ): body is FeedingInputBody => {
+
     if (
         typeof body !== "object" ||
         body === null ||
@@ -46,7 +45,8 @@ const isValidFeedingInput = (
 
     const validQuantity =
         (typeof input.quantityGrams === "number" ||
-            typeof input.quantityGrams === "string") &&
+            (typeof input.quantityGrams === "string" &&
+                input.quantityGrams.trim() !== "")) &&
         Number.isFinite(Number(input.quantityGrams)) &&
         Number(input.quantityGrams) > 0;
 
@@ -62,19 +62,99 @@ const isValidFeedingInput = (
     );
 };
 
-const isValidId = (id: string | string[]): boolean => {
-    if (typeof id !== "string") return false;
 
-    const numericId = Number(id);
+// Validate a partial feeding update (PATCH)
+const isValidFeedingPatch = (
+    body: unknown
+): body is Record<string, unknown> => {
 
-    return Number.isInteger(numericId) && numericId > 0;
+    if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body)
+    ) {
+        return false;
+    }
+
+    const input = body as Record<string, unknown>;
+    const keys = Object.keys(input);
+
+    const allowedFields = [
+        "foodName",
+        "quantityGrams",
+        "mealTime",
+        "notes",
+        "recordDate"
+    ];
+
+    if (
+        keys.length === 0 ||
+        keys.some(key => !allowedFields.includes(key))
+    ) {
+        return false;
+    }
+
+    if (
+        input.foodName !== undefined &&
+        (
+            typeof input.foodName !== "string" ||
+            input.foodName.trim().length === 0
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        input.quantityGrams !== undefined &&
+        (
+            !(
+                typeof input.quantityGrams === "number" ||
+                (
+                    typeof input.quantityGrams === "string" &&
+                    input.quantityGrams.trim() !== ""
+                )
+            ) ||
+            !Number.isFinite(Number(input.quantityGrams)) ||
+            Number(input.quantityGrams) <= 0
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        input.mealTime !== undefined &&
+        (
+            typeof input.mealTime !== "string" ||
+            input.mealTime.trim().length === 0
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        input.notes !== undefined &&
+        typeof input.notes !== "string"
+    ) {
+        return false;
+    }
+
+    if (
+        input.recordDate !== undefined &&
+        !isValidDate(input.recordDate)
+    ) {
+        return false;
+    }
+
+    return true;
 };
+
 
 // GET all feeding records, optionally filtered by date
 export const getAllFeedingRecordsController = (
     req: Request,
     res: Response
 ): void => {
+
     const date = req.query.date;
 
     if (date !== undefined && !isValidDate(date)) {
@@ -94,11 +174,13 @@ export const getAllFeedingRecordsController = (
     });
 };
 
+
 // POST a feeding record
 export const createFeedingRecordController = (
     req: Request,
     res: Response
 ): void => {
+
     if (!isValidFeedingInput(req.body)) {
         res.status(400).json({
             success: false,
@@ -130,11 +212,13 @@ export const createFeedingRecordController = (
     });
 };
 
+
 // GET feeding summary, optionally filtered by date
 export const getFeedingSummaryController = (
     req: Request,
     res: Response
 ): void => {
+
     const date = req.query.date;
 
     if (date !== undefined && !isValidDate(date)) {
@@ -153,11 +237,13 @@ export const getFeedingSummaryController = (
     });
 };
 
+
 // GET one feeding record by ID
 export const getFeedingRecordByIdController = (
     req: Request,
     res: Response
 ): void => {
+
     if (!isValidId(req.params.id)) {
         res.status(400).json({
             success: false,
@@ -182,18 +268,25 @@ export const getFeedingRecordByIdController = (
     });
 };
 
-// PATCH a feeding record
+
+// PUT: Replace all editable feeding fields
 export const updateFeedingRecordController = (
     req: Request,
     res: Response
 ): void => {
-    if (
-        !isValidId(req.params.id) ||
-        !isValidFeedingInput(req.body)
-    ) {
+
+    if (!isValidId(req.params.id)) {
         res.status(400).json({
             success: false,
-            message: "Please enter valid feeding details."
+            message: "Invalid feeding record ID."
+        });
+        return;
+    }
+
+    if (!isValidFeedingInput(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "PUT requires all valid feeding fields."
         });
         return;
     }
@@ -229,11 +322,80 @@ export const updateFeedingRecordController = (
     });
 };
 
+
+// PATCH: Update only selected feeding fields
+export const patchFeedingRecordController = (
+    req: Request,
+    res: Response
+): void => {
+
+    if (!isValidId(req.params.id)) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid feeding record ID."
+        });
+        return;
+    }
+
+    if (!isValidFeedingPatch(req.body)) {
+        res.status(400).json({
+            success: false,
+            message: "Please provide at least one valid feeding field to update."
+        });
+        return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+
+    const input: PatchFeedingInput = {};
+
+    if (body.foodName !== undefined) {
+        input.foodName = body.foodName as string;
+    }
+
+    if (body.quantityGrams !== undefined) {
+        input.quantityGrams = Number(body.quantityGrams);
+    }
+
+    if (body.mealTime !== undefined) {
+        input.mealTime = body.mealTime as string;
+    }
+
+    if (body.notes !== undefined) {
+        input.notes = body.notes as string;
+    }
+
+    if (body.recordDate !== undefined) {
+        input.recordDate = body.recordDate as string;
+    }
+
+    const record = patchFeedingRecord(
+        Number(req.params.id),
+        input
+    );
+
+    if (!record) {
+        res.status(404).json({
+            success: false,
+            message: "Feeding record not found."
+        });
+        return;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "Feeding record updated!",
+        record
+    });
+};
+
+
 // DELETE a feeding record
 export const deleteFeedingRecordController = (
     req: Request,
     res: Response
 ): void => {
+
     if (!isValidId(req.params.id)) {
         res.status(400).json({
             success: false,

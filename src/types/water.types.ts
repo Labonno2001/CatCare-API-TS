@@ -1,3 +1,4 @@
+
 export interface WaterRecord {
     id: number;
     offeredMl: number;
@@ -18,6 +19,7 @@ export interface WaterDatabaseRow {
     created_at: string;
 }
 
+// Required fields when creating or fully updating a water record
 export interface CreateWaterInput {
     offeredMl: number;
     consumedMl?: number | null;
@@ -25,3 +27,6 @@ export interface CreateWaterInput {
     notes?: string;
     recordDate: string;
 }
+
+// Optional fields when partially updating a water record
+export type PatchWaterInput = Partial<CreateWaterInput>;

@@ -7,6 +7,7 @@ import {
     getWaterSummaryController,
     getWaterRecordByIdController,
     updateWaterRecordController,
+    patchWaterRecordController,
     deleteWaterRecordController
 } from "../controllers/water.controller";
 
@@ -21,11 +22,14 @@ router.get("/", getAllWaterRecordsController);
 // POST a new water record
 router.post("/", createWaterRecordController);
 
-// GET a specific water record
+// GET one water record by ID
 router.get("/:id", getWaterRecordByIdController);
 
-// PATCH an existing water record
-router.patch("/:id", updateWaterRecordController);
+// PUT: Replace the complete water record
+router.put("/:id", updateWaterRecordController);
+
+// PATCH: Update selected water fields
+router.patch("/:id", patchWaterRecordController);
 
 // DELETE a water record
 router.delete("/:id", deleteWaterRecordController);

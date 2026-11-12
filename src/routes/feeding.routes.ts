@@ -7,6 +7,7 @@ import {
     getFeedingSummaryController,
     getFeedingRecordByIdController,
     updateFeedingRecordController,
+    patchFeedingRecordController,
     deleteFeedingRecordController
 } from "../controllers/feeding.controller";
 
@@ -24,8 +25,11 @@ router.post("/", createFeedingRecordController);
 // GET one feeding record by ID
 router.get("/:id", getFeedingRecordByIdController);
 
-// PATCH a feeding record
-router.patch("/:id", updateFeedingRecordController);
+// PUT: Replace the complete feeding record
+router.put("/:id", updateFeedingRecordController);
+
+// PATCH: Update selected feeding fields
+router.patch("/:id", patchFeedingRecordController);
 
 // DELETE a feeding record
 router.delete("/:id", deleteFeedingRecordController);

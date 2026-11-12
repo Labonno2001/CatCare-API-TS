@@ -1,20 +1,7 @@
 
 import { Request, Response } from "express";
 import { getDailyWellness } from "../wellness/wellness.service";
-
-// Validate YYYY-MM-DD format and actual calendar date
-const isValidDate = (date: string): boolean => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        return false;
-    }
-
-    const parsedDate = new Date(`${date}T00:00:00.000Z`);
-
-    return (
-        !Number.isNaN(parsedDate.getTime()) &&
-        parsedDate.toISOString().slice(0, 10) === date
-    );
-};
+import { isValidDate } from "../utils/validation";
 
 // GET daily wellness information
 export const getDailyWellnessController = (
@@ -23,7 +10,7 @@ export const getDailyWellnessController = (
 ): void => {
     const date = req.query.date;
 
-    if (typeof date !== "string" || !isValidDate(date)) {
+    if (!isValidDate(date)) {
         res.status(400).json({
             success: false,
             message: "Please provide a valid date in YYYY-MM-DD format."

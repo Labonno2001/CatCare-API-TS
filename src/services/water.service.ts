@@ -1,10 +1,13 @@
+
 import db from "../database/database";
 
 import {
     WaterRecord,
     WaterDatabaseRow,
-    CreateWaterInput
+    CreateWaterInput,
+    PatchWaterInput
 } from "../types/water.types";
+
 
 // Convert a database row into the API response format
 const formatWater = (
@@ -21,16 +24,19 @@ const formatWater = (
     };
 };
 
+
 // Get all water records, or filter by date
 export const getAllWaterRecords = (
     date?: string
 ): WaterRecord[] => {
+
     const rows = date
         ? db.prepare(`
             SELECT * FROM water_records
             WHERE record_date = ?
             ORDER BY id ASC
         `).all(date) as WaterDatabaseRow[]
+
         : db.prepare(`
             SELECT * FROM water_records
             ORDER BY record_date DESC, id ASC
@@ -39,10 +45,12 @@ export const getAllWaterRecords = (
     return rows.map(formatWater);
 };
 
+
 // Create a water record
 export const createWaterRecord = (
     input: CreateWaterInput
 ): WaterRecord => {
+
     const result = db.prepare(`
         INSERT INTO water_records (
             offered_ml,
@@ -55,7 +63,7 @@ export const createWaterRecord = (
         VALUES (?, ?, ?, ?, ?, ?)
     `).run(
         input.offeredMl,
-        input.measured ? input.consumedMl : null,
+        input.measured ? input.consumedMl ?? null : null,
         input.measured ? 1 : 0,
         input.notes ?? "",
         new Date().toISOString(),
@@ -69,6 +77,7 @@ export const createWaterRecord = (
     return formatWater(row);
 };
 
+
 // Get water summary, optionally for one date
 export const getWaterSummary = (
     date?: string
@@ -78,6 +87,7 @@ export const getWaterSummary = (
     measuredConsumptionRecords: number;
     totalMeasuredConsumedMl: number;
 } => {
+
     const summary = date
         ? db.prepare(`
             SELECT
@@ -99,6 +109,7 @@ export const getWaterSummary = (
             FROM water_records
             WHERE record_date = ?
         `).get(date)
+
         : db.prepare(`
             SELECT
                 COUNT(*) AS totalRecords,
@@ -127,24 +138,30 @@ export const getWaterSummary = (
     };
 };
 
+
 // Get one water record by ID
 export const getWaterRecordById = (
     id: number
 ): WaterRecord | null => {
+
     const row = db.prepare(
         "SELECT * FROM water_records WHERE id = ?"
     ).get(id) as WaterDatabaseRow | undefined;
 
-    if (!row) return null;
+    if (!row) {
+        return null;
+    }
 
     return formatWater(row);
 };
 
-// Update a water record, including its date
+
+// Full update: Replace all editable water fields
 export const updateWaterRecord = (
     id: number,
     input: CreateWaterInput
 ): WaterRecord | null => {
+
     const result = db.prepare(`
         UPDATE water_records
         SET offered_ml = ?,
@@ -155,14 +172,16 @@ export const updateWaterRecord = (
         WHERE id = ?
     `).run(
         input.offeredMl,
-        input.measured ? input.consumedMl : null,
+        input.measured ? input.consumedMl ?? null : null,
         input.measured ? 1 : 0,
         input.notes ?? "",
         input.recordDate,
         id
     );
 
-    if (result.changes === 0) return null;
+    if (result.changes === 0) {
+        return null;
+    }
 
     const row = db.prepare(
         "SELECT * FROM water_records WHERE id = ?"
@@ -171,13 +190,101 @@ export const updateWaterRecord = (
     return formatWater(row);
 };
 
+
 // Delete a water record
 export const deleteWaterRecord = (
     id: number
 ): boolean => {
+
     const result = db.prepare(
         "DELETE FROM water_records WHERE id = ?"
     ).run(id);
 
     return result.changes > 0;
+};
+
+
+// Partial update: Update only the fields provided
+export const patchWaterRecord = (
+    id: number,
+    input: PatchWaterInput
+): WaterRecord | null => {
+
+    const fields: string[] = [];
+    const values: (string | number | null)[] = [];
+
+
+    // Update offered water if provided
+    if (input.offeredMl !== undefined) {
+        fields.push("offered_ml = ?");
+        values.push(input.offeredMl);
+    }
+
+
+    // Update consumed water if provided
+    if (input.consumedMl !== undefined) {
+        fields.push("consumed_ml = ?");
+        values.push(input.consumedMl);
+    }
+
+
+    // Update whether consumption is measured
+    if (input.measured !== undefined) {
+        fields.push("measured = ?");
+        values.push(input.measured ? 1 : 0);
+
+        // If measurement is disabled, consumed amount becomes NULL
+        if (input.measured === false) {
+            fields.push("consumed_ml = ?");
+            values.push(null);
+        }
+    }
+
+
+    // Update notes if provided
+    if (input.notes !== undefined) {
+        fields.push("notes = ?");
+        values.push(input.notes);
+    }
+
+
+    // Update record date if provided
+    if (input.recordDate !== undefined) {
+        fields.push("record_date = ?");
+        values.push(input.recordDate);
+    }
+
+
+    // Prevent an empty database update
+    if (fields.length === 0) {
+        return null;
+    }
+
+
+    // Add the record ID for the WHERE condition
+    values.push(id);
+
+
+    // Execute the dynamic SQL update
+    const result = db.prepare(`
+        UPDATE water_records
+        SET ${fields.join(", ")}
+        WHERE id = ?
+    `).run(...values);
+
+
+    // Check whether a record was updated
+    if (result.changes === 0) {
+        return null;
+    }
+
+
+    // Retrieve the updated water record
+    const row = db.prepare(
+        "SELECT * FROM water_records WHERE id = ?"
+    ).get(id) as WaterDatabaseRow;
+
+
+    // Return the updated record
+    return formatWater(row);
 };

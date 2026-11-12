@@ -1,8 +1,9 @@
-import db from "../database/database";
+
 import { getCatProfile } from "../services/cat.service";
+import { getFeedingSummary } from "../services/feeding.service";
+import { getWaterSummary } from "../services/water.service";
 
 export const getDailyWellness = (date: string) => {
-
     // 1. Get cat profile
     const cat = getCatProfile();
 
@@ -10,44 +11,11 @@ export const getDailyWellness = (date: string) => {
         return null;
     }
 
-    // 2. Get feeding summary for the selected date
-    const feedingSummary = db.prepare(`
-        SELECT
-            COUNT(*) AS totalRecords,
-            COALESCE(SUM(quantity_grams), 0) AS totalGrams
-        FROM feeding_records
-        WHERE record_date = ?
-    `).get(date) as {
-        totalRecords: number;
-        totalGrams: number;
-    };
+    // 2. Reuse the feeding summary service
+    const feedingSummary = getFeedingSummary(date);
 
-    // 3. Get water summary for the selected date
-    const waterSummary = db.prepare(`
-        SELECT
-            COUNT(*) AS totalRecords,
-            COALESCE(SUM(offered_ml), 0) AS totalOfferedMl,
-            COALESCE(
-                SUM(CASE WHEN measured = 1 THEN 1 ELSE 0 END),
-                0
-            ) AS measuredConsumptionRecords,
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN measured = 1 THEN consumed_ml
-                        ELSE 0
-                    END
-                ),
-                0
-            ) AS totalMeasuredConsumedMl
-        FROM water_records
-        WHERE record_date = ?
-    `).get(date) as {
-        totalRecords: number;
-        totalOfferedMl: number;
-        measuredConsumptionRecords: number;
-        totalMeasuredConsumedMl: number;
-    };
+    // 3. Reuse the water summary service
+    const waterSummary = getWaterSummary(date);
 
     // 4. Return combined daily wellness data
     return {

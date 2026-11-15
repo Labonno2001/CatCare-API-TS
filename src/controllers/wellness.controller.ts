@@ -1,16 +1,19 @@
 
 import { Request, Response } from "express";
+
 import { getDailyWellness } from "../wellness/wellness.service";
 import { isValidDate } from "../utils/validation";
 
 // GET daily wellness information
-export const getDailyWellnessController = (
+export const getDailyWellnessController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
+
     const date = req.query.date;
 
-    if (!isValidDate(date)) {
+    // Validate the requested date
+    if (typeof date !== "string" || !isValidDate(date)) {
         res.status(400).json({
             success: false,
             message: "Please provide a valid date in YYYY-MM-DD format."
@@ -18,7 +21,8 @@ export const getDailyWellnessController = (
         return;
     }
 
-    const wellness = getDailyWellness(date);
+    // Get combined wellness information
+    const wellness = await getDailyWellness(date);
 
     if (!wellness) {
         res.status(404).json({

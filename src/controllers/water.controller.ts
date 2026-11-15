@@ -167,10 +167,12 @@ const isValidWaterPatch = (
 
 
 // GET all water records, optionally filtered by date
-export const getAllWaterRecordsController = (
+export const getAllWaterRecordsController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
+
+    console.log("GET ALL WATER RECORDS CONTROLLER CALLED");
 
     const date = req.query.date;
 
@@ -182,7 +184,9 @@ export const getAllWaterRecordsController = (
         return;
     }
 
-    const records = getAllWaterRecords(date as string | undefined);
+    const records = await getAllWaterRecords(
+        date as string | undefined
+    );
 
     res.status(200).json({
         success: true,
@@ -193,10 +197,10 @@ export const getAllWaterRecordsController = (
 
 
 // POST a water record
-export const createWaterRecordController = (
+export const createWaterRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidWaterInput(req.body)) {
         res.status(400).json({
@@ -214,7 +218,7 @@ export const createWaterRecordController = (
         recordDate
     } = req.body;
 
-    const record = createWaterRecord({
+    const record = await createWaterRecord({
         offeredMl: Number(offeredMl),
         consumedMl: measured ? Number(consumedMl) : null,
         measured,
@@ -231,10 +235,10 @@ export const createWaterRecordController = (
 
 
 // GET water summary, optionally filtered by date
-export const getWaterSummaryController = (
+export const getWaterSummaryController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     const date = req.query.date;
 
@@ -246,7 +250,9 @@ export const getWaterSummaryController = (
         return;
     }
 
-    const summary = getWaterSummary(date as string | undefined);
+    const summary = await getWaterSummary(
+        date as string | undefined
+    );
 
     res.status(200).json({
         success: true,
@@ -256,10 +262,10 @@ export const getWaterSummaryController = (
 
 
 // GET one water record by ID
-export const getWaterRecordByIdController = (
+export const getWaterRecordByIdController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -269,7 +275,9 @@ export const getWaterRecordByIdController = (
         return;
     }
 
-    const record = getWaterRecordById(Number(req.params.id));
+    const record = await getWaterRecordById(
+        Number(req.params.id)
+    );
 
     if (!record) {
         res.status(404).json({
@@ -287,10 +295,10 @@ export const getWaterRecordByIdController = (
 
 
 // PUT: Replace all editable water fields
-export const updateWaterRecordController = (
+export const updateWaterRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -316,13 +324,16 @@ export const updateWaterRecordController = (
         recordDate
     } = req.body;
 
-    const record = updateWaterRecord(Number(req.params.id), {
-        offeredMl: Number(offeredMl),
-        consumedMl: measured ? Number(consumedMl) : null,
-        measured,
-        notes,
-        recordDate
-    });
+    const record = await updateWaterRecord(
+        Number(req.params.id),
+        {
+            offeredMl: Number(offeredMl),
+            consumedMl: measured ? Number(consumedMl) : null,
+            measured,
+            notes,
+            recordDate
+        }
+    );
 
     if (!record) {
         res.status(404).json({
@@ -341,10 +352,10 @@ export const updateWaterRecordController = (
 
 
 // PATCH: Update only selected water fields
-export const patchWaterRecordController = (
+export const patchWaterRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -365,7 +376,7 @@ export const patchWaterRecordController = (
     const id = Number(req.params.id);
 
     // Retrieve the existing record to validate the resulting state
-    const existingRecord = getWaterRecordById(id);
+    const existingRecord = await getWaterRecordById(id);
 
     if (!existingRecord) {
         res.status(404).json({
@@ -434,7 +445,7 @@ export const patchWaterRecordController = (
         return;
     }
 
-    const record = patchWaterRecord(id, input);
+    const record = await patchWaterRecord(id, input);
 
     if (!record) {
         res.status(404).json({
@@ -453,10 +464,10 @@ export const patchWaterRecordController = (
 
 
 // DELETE a water record
-export const deleteWaterRecordController = (
+export const deleteWaterRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -466,7 +477,9 @@ export const deleteWaterRecordController = (
         return;
     }
 
-    const deleted = deleteWaterRecord(Number(req.params.id));
+    const deleted = await deleteWaterRecord(
+        Number(req.params.id)
+    );
 
     if (!deleted) {
         res.status(404).json({

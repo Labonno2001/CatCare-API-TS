@@ -4,7 +4,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "node:path";
 
-import db from "./database/database";
+import { AppDataSource } from "./database/data-source";
+import { initializeDatabase } from "./database/initialize-database";
 
 import catRoutes from "./routes/cat.routes";
 import feedingRoutes from "./routes/feeding.routes";
@@ -13,41 +14,42 @@ import wellnessRoutes from "./routes/wellness.routes";
 
 import { errorHandler } from "./middleware/error.middleware";
 
+// Load environment variables.
 dotenv.config();
 
+// Create Express application.
 const app = express();
 
-// Global middleware
+// Middleware.
 app.use(cors());
 app.use(express.json());
 
-// API routes
+// API routes.
 app.use("/api/cat", catRoutes);
 app.use("/api/feeding", feedingRoutes);
 app.use("/api/water", waterRoutes);
 app.use("/api/wellness", wellnessRoutes);
 
-// Serve frontend files from the public folder
+// Serve frontend files.
 const publicPath = path.join(process.cwd(), "public");
 
 app.use(express.static(publicPath));
 
-// Root route - serves index.html
 app.get("/", (_req, res) => {
     res.sendFile(path.join(publicPath, "index.html"));
 });
 
-// Health check
+// Health check.
 app.get("/api/health", (_req, res: Response) => {
     res.status(200).json({
         success: true,
         message: "CatCare API is running",
-        database: db.open,
+        database: AppDataSource.isInitialized,
         timestamp: new Date()
     });
 });
 
-// Handle unknown routes
+// Handle unknown routes.
 app.use((_req, res) => {
     res.status(404).json({
         success: false,
@@ -55,13 +57,41 @@ app.use((_req, res) => {
     });
 });
 
-// Centralized error handler - must be last
+// Global error handler.
 app.use(errorHandler);
 
-// Server configuration
+// Server configuration.
 const PORT = process.env.PORT || 3000;
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`CatCare API running on port ${PORT}`);
-});
+// Start server.
+const startServer = async (): Promise<void> => {
+    try {
+        // Connect TypeORM to SQLite.
+        if (!AppDataSource.isInitialized) {
+            await AppDataSource.initialize();
+        }
+
+        // Initialize database tables and preserve existing records.
+        await initializeDatabase();
+
+        console.log("TypeORM connected successfully!");
+
+        console.log(
+            "Registered entities:",
+            AppDataSource.entityMetadatas
+                .map(entity => entity.name)
+                .join(", ")
+        );
+
+        // Start Express server.
+        app.listen(PORT, () => {
+            console.log(`CatCare API running on port ${PORT}`);
+        });
+
+    } catch (error) {
+        console.error("Failed to start CatCare API:", error);
+        process.exit(1);
+    }
+};
+
+void startServer();

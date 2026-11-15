@@ -1,122 +1,107 @@
 
-import db from "../database/database";
+import { AppDataSource } from "../database/data-source";
+import { FeedingRecord as FeedingRecordEntity } from "../entities/FeedingRecord";
 
 import {
     FeedingRecord,
-    FeedingDatabaseRow,
     CreateFeedingInput,
     PatchFeedingInput
 } from "../types/feeding.types";
 
+const feedingRepository =
+    AppDataSource.getRepository(FeedingRecordEntity);
 
-// Convert a database row into the API response format
+
+// Convert a TypeORM entity into the existing API response format.
 const formatFeeding = (
-    row: FeedingDatabaseRow
+    row: FeedingRecordEntity
 ): FeedingRecord => {
     return {
         id: row.id,
-        foodName: row.food_name,
-        quantityGrams: row.quantity_grams,
-        mealTime: row.meal_time,
+        foodName: row.foodName,
+        quantityGrams: row.quantityGrams,
+        mealTime: row.mealTime,
         notes: row.notes,
-        recordDate: row.record_date ?? row.created_at.slice(0, 10),
-        createdAt: row.created_at
+        recordDate: row.recordDate ?? row.createdAt.slice(0, 10),
+        createdAt: row.createdAt
     };
 };
 
 
-// Get all feeding records, or filter by date
-export const getAllFeedingRecords = (
+// Get all feeding records, optionally filtered by date.
+export const getAllFeedingRecords = async (
     date?: string
-): FeedingRecord[] => {
+): Promise<FeedingRecord[]> => {
 
-    const rows = date
-        ? db.prepare(`
-            SELECT * FROM feeding_records
-            WHERE record_date = ?
-            ORDER BY id ASC
-        `).all(date) as FeedingDatabaseRow[]
-
-        : db.prepare(`
-            SELECT * FROM feeding_records
-            ORDER BY record_date DESC, id ASC
-        `).all() as FeedingDatabaseRow[];
+    const rows = await feedingRepository.find({
+        where: date ? { recordDate: date } : {},
+        order: date
+            ? { id: "ASC" }
+            : { recordDate: "DESC", id: "ASC" }
+    });
 
     return rows.map(formatFeeding);
 };
 
 
-// Create a feeding record
-export const createFeedingRecord = (
+// Create a feeding record.
+export const createFeedingRecord = async (
     input: CreateFeedingInput
-): FeedingRecord => {
+): Promise<FeedingRecord> => {
 
-    const result = db.prepare(`
-        INSERT INTO feeding_records (
-            food_name,
-            quantity_grams,
-            meal_time,
-            notes,
-            created_at,
-            record_date
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-        input.foodName.trim(),
-        input.quantityGrams,
-        input.mealTime,
-        input.notes ?? "",
-        new Date().toISOString(),
-        input.recordDate
-    );
+    const newRecord = feedingRepository.create({
+        foodName: input.foodName.trim(),
+        quantityGrams: input.quantityGrams,
+        mealTime: input.mealTime,
+        notes: input.notes ?? "",
+        createdAt: new Date().toISOString(),
+        recordDate: input.recordDate
+    });
 
-    const row = db.prepare(
-        "SELECT * FROM feeding_records WHERE id = ?"
-    ).get(result.lastInsertRowid) as FeedingDatabaseRow;
+    const savedRecord = await feedingRepository.save(newRecord);
 
-    return formatFeeding(row);
+    return formatFeeding(savedRecord);
 };
 
 
-// Get feeding summary, optionally for one date
-export const getFeedingSummary = (
+// Get feeding summary, optionally filtered by date.
+export const getFeedingSummary = async (
     date?: string
-): {
+): Promise<{
     totalRecords: number;
     totalGrams: number;
-} => {
+}> => {
 
-    const summary = date
-        ? db.prepare(`
-            SELECT
-                COUNT(*) AS totalRecords,
-                COALESCE(SUM(quantity_grams), 0) AS totalGrams
-            FROM feeding_records
-            WHERE record_date = ?
-        `).get(date)
+    const query = feedingRepository
+        .createQueryBuilder("feeding")
+        .select("COUNT(*)", "totalRecords")
+        .addSelect(
+            "COALESCE(SUM(feeding.quantityGrams), 0)",
+            "totalGrams"
+        );
 
-        : db.prepare(`
-            SELECT
-                COUNT(*) AS totalRecords,
-                COALESCE(SUM(quantity_grams), 0) AS totalGrams
-            FROM feeding_records
-        `).get();
+    if (date) {
+        query.where("feeding.recordDate = :date", { date });
+    }
 
-    return summary as {
-        totalRecords: number;
-        totalGrams: number;
+    const summary = await query.getRawOne<{
+        totalRecords: string | number;
+        totalGrams: string | number;
+    }>();
+
+    return {
+        totalRecords: Number(summary?.totalRecords ?? 0),
+        totalGrams: Number(summary?.totalGrams ?? 0)
     };
 };
 
 
-// Get one feeding record by ID
-export const getFeedingRecordById = (
+// Get one feeding record by ID.
+export const getFeedingRecordById = async (
     id: number
-): FeedingRecord | null => {
+): Promise<FeedingRecord | null> => {
 
-    const row = db.prepare(
-        "SELECT * FROM feeding_records WHERE id = ?"
-    ).get(id) as FeedingDatabaseRow | undefined;
+    const row = await feedingRepository.findOneBy({ id });
 
     if (!row) {
         return null;
@@ -126,129 +111,80 @@ export const getFeedingRecordById = (
 };
 
 
-// Full update: Replace all editable feeding fields
-export const updateFeedingRecord = (
+// Full update: Replace all editable feeding fields.
+export const updateFeedingRecord = async (
     id: number,
     input: CreateFeedingInput
-): FeedingRecord | null => {
+): Promise<FeedingRecord | null> => {
 
-    const result = db.prepare(`
-        UPDATE feeding_records
-        SET food_name = ?,
-            quantity_grams = ?,
-            meal_time = ?,
-            notes = ?,
-            record_date = ?
-        WHERE id = ?
-    `).run(
-        input.foodName.trim(),
-        input.quantityGrams,
-        input.mealTime,
-        input.notes ?? "",
-        input.recordDate,
-        id
-    );
+    const record = await feedingRepository.findOneBy({ id });
 
-    if (result.changes === 0) {
+    if (!record) {
         return null;
     }
 
-    const row = db.prepare(
-        "SELECT * FROM feeding_records WHERE id = ?"
-    ).get(id) as FeedingDatabaseRow;
+    record.foodName = input.foodName.trim();
+    record.quantityGrams = input.quantityGrams;
+    record.mealTime = input.mealTime;
+    record.notes = input.notes ?? "";
+    record.recordDate = input.recordDate;
 
-    return formatFeeding(row);
+    const updatedRecord = await feedingRepository.save(record);
+
+    return formatFeeding(updatedRecord);
 };
 
 
-// Delete a feeding record
-export const deleteFeedingRecord = (
+// Delete a feeding record.
+export const deleteFeedingRecord = async (
     id: number
-): boolean => {
+): Promise<boolean> => {
 
-    const result = db.prepare(
-        "DELETE FROM feeding_records WHERE id = ?"
-    ).run(id);
+    const record = await feedingRepository.findOneBy({ id });
 
-    return result.changes > 0;
+    if (!record) {
+        return false;
+    }
+
+    await feedingRepository.remove(record);
+
+    return true;
 };
 
 
-// Partial update: Update only the fields provided
-export const patchFeedingRecord = (
+// Partial update: Update only the fields provided.
+export const patchFeedingRecord = async (
     id: number,
     input: PatchFeedingInput
-): FeedingRecord | null => {
+): Promise<FeedingRecord | null> => {
 
-    const fields: string[] = [];
-    const values: (string | number)[] = [];
+    const record = await feedingRepository.findOneBy({ id });
 
+    if (!record) {
+        return null;
+    }
 
-    // Update food name if provided
     if (input.foodName !== undefined) {
-        fields.push("food_name = ?");
-        values.push(input.foodName.trim());
+        record.foodName = input.foodName.trim();
     }
 
-
-    // Update quantity if provided
     if (input.quantityGrams !== undefined) {
-        fields.push("quantity_grams = ?");
-        values.push(input.quantityGrams);
+        record.quantityGrams = input.quantityGrams;
     }
 
-
-    // Update meal time if provided
     if (input.mealTime !== undefined) {
-        fields.push("meal_time = ?");
-        values.push(input.mealTime);
+        record.mealTime = input.mealTime;
     }
 
-
-    // Update notes if provided
     if (input.notes !== undefined) {
-        fields.push("notes = ?");
-        values.push(input.notes);
+        record.notes = input.notes;
     }
 
-
-    // Update record date if provided
     if (input.recordDate !== undefined) {
-        fields.push("record_date = ?");
-        values.push(input.recordDate);
+        record.recordDate = input.recordDate;
     }
 
+    const updatedRecord = await feedingRepository.save(record);
 
-    // Prevent an empty database update
-    if (fields.length === 0) {
-        return null;
-    }
-
-
-    // Add the record ID for the WHERE condition
-    values.push(id);
-
-
-    // Execute the dynamic SQL update
-    const result = db.prepare(`
-        UPDATE feeding_records
-        SET ${fields.join(", ")}
-        WHERE id = ?
-    `).run(...values);
-
-
-    // Check whether a record was updated
-    if (result.changes === 0) {
-        return null;
-    }
-
-
-    // Retrieve the updated feeding record
-    const row = db.prepare(
-        "SELECT * FROM feeding_records WHERE id = ?"
-    ).get(id) as FeedingDatabaseRow;
-
-
-    // Return the updated record
-    return formatFeeding(row);
+    return formatFeeding(updatedRecord);
 };

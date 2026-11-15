@@ -7,10 +7,12 @@ import {
     UpdateCatProfileInput
 } from "../services/cat.service";
 
+
 // Validate partial cat profile updates
 const isValidCatProfileInput = (
     body: unknown
 ): body is UpdateCatProfileInput => {
+
     if (
         typeof body !== "object" ||
         body === null ||
@@ -33,14 +35,17 @@ const isValidCatProfileInput = (
 
     if (
         keys.length === 0 ||
-        keys.some((key) => !allowedFields.includes(key))
+        keys.some(key => !allowedFields.includes(key))
     ) {
         return false;
     }
 
     if (
         input.name !== undefined &&
-        (typeof input.name !== "string" || !input.name.trim())
+        (
+            typeof input.name !== "string" ||
+            !input.name.trim()
+        )
     ) {
         return false;
     }
@@ -90,12 +95,14 @@ const isValidCatProfileInput = (
     return true;
 };
 
+
 // GET cat profile
-export const getCatProfileController = (
+export const getCatProfileController = async (
     _req: Request,
     res: Response
-): void => {
-    const cat = getCatProfile();
+): Promise<void> => {
+
+    const cat = await getCatProfile();
 
     if (!cat) {
         res.status(404).json({
@@ -112,11 +119,13 @@ export const getCatProfileController = (
     });
 };
 
+
 // PATCH cat profile
-export const updateCatProfileController = (
+export const updateCatProfileController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
+
     if (!isValidCatProfileInput(req.body)) {
         res.status(400).json({
             success: false,
@@ -125,7 +134,7 @@ export const updateCatProfileController = (
         return;
     }
 
-    const cat = updateCatProfile(req.body);
+    const cat = await updateCatProfile(req.body);
 
     if (!cat) {
         res.status(404).json({

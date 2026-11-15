@@ -1,5 +1,6 @@
 
-import db from "../database/database";
+import { AppDataSource } from "../database/data-source";
+import { CatProfileEntity } from "../entities/CatProfile";
 import { CatProfile } from "../types/cat.types";
 
 export interface UpdateCatProfileInput {
@@ -10,76 +11,74 @@ export interface UpdateCatProfileInput {
     activity?: string;
 }
 
-interface CatDatabaseRow {
-    id: number;
-    name: string;
-    age: number;
-    weight_kg: number;
-    favorite_food: string;
-    activity: string;
-}
+const catRepository =
+    AppDataSource.getRepository(CatProfileEntity);
 
-// Get the cat profile
-export const getCatProfile = (): CatProfile | null => {
-    const row = db
-        .prepare("SELECT * FROM cat_profile WHERE id = ?")
-        .get(1) as CatDatabaseRow | undefined;
 
-    if (!row) return null;
-
+// Convert TypeORM entity into API response format
+const formatCatProfile = (
+    cat: CatProfileEntity
+): CatProfile => {
     return {
-        id: row.id,
-        name: row.name,
-        age: row.age,
-        weightKg: row.weight_kg,
-        favoriteFood: row.favorite_food,
-        activity: row.activity
+        id: cat.id,
+        name: cat.name,
+        age: cat.age,
+        weightKg: cat.weightKg,
+        favoriteFood: cat.favoriteFood,
+        activity: cat.activity
     };
 };
 
+
+// Get the cat profile
+export const getCatProfile = async (): Promise<CatProfile | null> => {
+
+    const cat = await catRepository.findOneBy({
+        id: 1
+    });
+
+    if (!cat) {
+        return null;
+    }
+
+    return formatCatProfile(cat);
+};
+
+
 // Update selected cat profile fields
-export const updateCatProfile = (
+export const updateCatProfile = async (
     input: UpdateCatProfileInput
-): CatProfile | null => {
-    const updates: string[] = [];
-    const values: (string | number)[] = [];
+): Promise<CatProfile | null> => {
+
+    const cat = await catRepository.findOneBy({
+        id: 1
+    });
+
+    if (!cat) {
+        return null;
+    }
 
     if (input.name !== undefined) {
-        updates.push("name = ?");
-        values.push(input.name);
+        cat.name = input.name.trim();
     }
 
     if (input.age !== undefined) {
-        updates.push("age = ?");
-        values.push(input.age);
+        cat.age = input.age;
     }
 
     if (input.weightKg !== undefined) {
-        updates.push("weight_kg = ?");
-        values.push(input.weightKg);
+        cat.weightKg = input.weightKg;
     }
 
     if (input.favoriteFood !== undefined) {
-        updates.push("favorite_food = ?");
-        values.push(input.favoriteFood);
+        cat.favoriteFood = input.favoriteFood.trim();
     }
 
     if (input.activity !== undefined) {
-        updates.push("activity = ?");
-        values.push(input.activity);
+        cat.activity = input.activity.trim();
     }
 
-    if (updates.length === 0) {
-        return getCatProfile();
-    }
+    const updatedCat = await catRepository.save(cat);
 
-    values.push(1);
-
-    db.prepare(`
-        UPDATE cat_profile
-        SET ${updates.join(", ")}
-        WHERE id = ?
-    `).run(...values);
-
-    return getCatProfile();
+    return formatCatProfile(updatedCat);
 };

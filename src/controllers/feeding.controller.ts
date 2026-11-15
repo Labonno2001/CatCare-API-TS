@@ -150,10 +150,10 @@ const isValidFeedingPatch = (
 
 
 // GET all feeding records, optionally filtered by date
-export const getAllFeedingRecordsController = (
+export const getAllFeedingRecordsController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     const date = req.query.date;
 
@@ -165,7 +165,9 @@ export const getAllFeedingRecordsController = (
         return;
     }
 
-    const records = getAllFeedingRecords(date as string | undefined);
+    const records = await getAllFeedingRecords(
+        date as string | undefined
+    );
 
     res.status(200).json({
         success: true,
@@ -176,10 +178,10 @@ export const getAllFeedingRecordsController = (
 
 
 // POST a feeding record
-export const createFeedingRecordController = (
+export const createFeedingRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidFeedingInput(req.body)) {
         res.status(400).json({
@@ -197,7 +199,7 @@ export const createFeedingRecordController = (
         recordDate
     } = req.body;
 
-    const record = createFeedingRecord({
+    const record = await createFeedingRecord({
         foodName,
         quantityGrams: Number(quantityGrams),
         mealTime,
@@ -214,10 +216,10 @@ export const createFeedingRecordController = (
 
 
 // GET feeding summary, optionally filtered by date
-export const getFeedingSummaryController = (
+export const getFeedingSummaryController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     const date = req.query.date;
 
@@ -229,7 +231,9 @@ export const getFeedingSummaryController = (
         return;
     }
 
-    const summary = getFeedingSummary(date as string | undefined);
+    const summary = await getFeedingSummary(
+        date as string | undefined
+    );
 
     res.status(200).json({
         success: true,
@@ -239,10 +243,10 @@ export const getFeedingSummaryController = (
 
 
 // GET one feeding record by ID
-export const getFeedingRecordByIdController = (
+export const getFeedingRecordByIdController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -252,7 +256,9 @@ export const getFeedingRecordByIdController = (
         return;
     }
 
-    const record = getFeedingRecordById(Number(req.params.id));
+    const record = await getFeedingRecordById(
+        Number(req.params.id)
+    );
 
     if (!record) {
         res.status(404).json({
@@ -270,10 +276,10 @@ export const getFeedingRecordByIdController = (
 
 
 // PUT: Replace all editable feeding fields
-export const updateFeedingRecordController = (
+export const updateFeedingRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -299,13 +305,16 @@ export const updateFeedingRecordController = (
         recordDate
     } = req.body;
 
-    const record = updateFeedingRecord(Number(req.params.id), {
-        foodName,
-        quantityGrams: Number(quantityGrams),
-        mealTime,
-        notes,
-        recordDate
-    });
+    const record = await updateFeedingRecord(
+        Number(req.params.id),
+        {
+            foodName,
+            quantityGrams: Number(quantityGrams),
+            mealTime,
+            notes,
+            recordDate
+        }
+    );
 
     if (!record) {
         res.status(404).json({
@@ -324,10 +333,10 @@ export const updateFeedingRecordController = (
 
 
 // PATCH: Update only selected feeding fields
-export const patchFeedingRecordController = (
+export const patchFeedingRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -369,7 +378,7 @@ export const patchFeedingRecordController = (
         input.recordDate = body.recordDate as string;
     }
 
-    const record = patchFeedingRecord(
+    const record = await patchFeedingRecord(
         Number(req.params.id),
         input
     );
@@ -391,10 +400,10 @@ export const patchFeedingRecordController = (
 
 
 // DELETE a feeding record
-export const deleteFeedingRecordController = (
+export const deleteFeedingRecordController = async (
     req: Request,
     res: Response
-): void => {
+): Promise<void> => {
 
     if (!isValidId(req.params.id)) {
         res.status(400).json({
@@ -404,7 +413,9 @@ export const deleteFeedingRecordController = (
         return;
     }
 
-    const deleted = deleteFeedingRecord(Number(req.params.id));
+    const deleted = await deleteFeedingRecord(
+        Number(req.params.id)
+    );
 
     if (!deleted) {
         res.status(404).json({

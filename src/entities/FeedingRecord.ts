@@ -3,10 +3,15 @@ import {
     Entity,
     PrimaryGeneratedColumn,
     Column,
+    ManyToOne,
+    JoinColumn
 } from "typeorm";
+
+import { CatProfileEntity } from "./CatProfile";
 
 @Entity("feeding_records")
 export class FeedingRecord {
+
     @PrimaryGeneratedColumn()
     id!: number;
 
@@ -25,6 +30,22 @@ export class FeedingRecord {
     @Column({ name: "created_at", type: "text" })
     createdAt!: string;
 
-    @Column({ name: "record_date", type: "text", nullable: true })
+    @Column({
+        name: "record_date",
+        type: "text",
+        nullable: true
+    })
     recordDate!: string | null;
+
+    // Many feeding records belong to one cat.
+    @ManyToOne(
+        () => CatProfileEntity,
+        (cat) => cat.feedingRecords,
+        { nullable: false }
+    )
+    @JoinColumn({
+        name: "cat_id",
+        referencedColumnName: "id"
+    })
+    cat!: CatProfileEntity;
 }

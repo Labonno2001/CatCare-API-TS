@@ -1,8 +1,13 @@
+
 import {
     Entity,
     PrimaryGeneratedColumn,
     Column,
+    ManyToOne,
+    JoinColumn
 } from "typeorm";
+
+import { CatProfileEntity } from "./CatProfile";
 
 @Entity("water_records")
 export class WaterRecord {
@@ -35,4 +40,16 @@ export class WaterRecord {
         nullable: true
     })
     recordDate!: string | null;
+
+    // Many water records belong to one cat.
+    @ManyToOne(
+        () => CatProfileEntity,
+        (cat) => cat.waterRecords,
+        { nullable: false }
+    )
+    @JoinColumn({
+        name: "cat_id",
+        referencedColumnName: "id"
+    })
+    cat!: CatProfileEntity;
 }

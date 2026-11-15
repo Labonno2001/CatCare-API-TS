@@ -2,8 +2,12 @@
 import {
     Entity,
     PrimaryColumn,
-    Column
+    Column,
+    OneToMany
 } from "typeorm";
+
+import { FeedingRecord } from "./FeedingRecord";
+import { WaterRecord } from "./WaterRecord";
 
 @Entity("cat_profile")
 export class CatProfileEntity {
@@ -31,4 +35,18 @@ export class CatProfileEntity {
 
     @Column({ type: "text" })
     activity!: string;
+
+    // One cat can have many feeding records.
+    @OneToMany(
+        () => FeedingRecord,
+        (feedingRecord) => feedingRecord.cat
+    )
+    feedingRecords!: FeedingRecord[];
+
+    // One cat can have many water records.
+    @OneToMany(
+        () => WaterRecord,
+        (waterRecord) => waterRecord.cat
+    )
+    waterRecords!: WaterRecord[];
 }

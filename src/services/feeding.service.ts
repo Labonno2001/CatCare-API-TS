@@ -11,28 +11,30 @@ import {
 const feedingRepository =
     AppDataSource.getRepository(FeedingRecordEntity);
 
+export interface FeedingQueryOptions {
+    startDate?: string;
+    endDate?: string;
+    foodName?: string;
+    mealTime?: string;
+    sortBy?: "recordDate" | "quantityGrams" | "foodName";
+    order?: "ASC" | "DESC";
+    page?: number;
+    limit?: number;
+}
 
-// Convert a TypeORM entity into the existing API response format.
-const formatFeeding = (
-    row: FeedingRecordEntity
-): FeedingRecord => {
-    return {
-        id: row.id,
-        foodName: row.foodName,
-        quantityGrams: row.quantityGrams,
-        mealTime: row.mealTime,
-        notes: row.notes,
-        recordDate: row.recordDate ?? row.createdAt.slice(0, 10),
-        createdAt: row.createdAt
-    };
-};
+const formatFeeding = (row: FeedingRecordEntity): FeedingRecord => ({
+    id: row.id,
+    foodName: row.foodName,
+    quantityGrams: row.quantityGrams,
+    mealTime: row.mealTime,
+    notes: row.notes,
+    recordDate: row.recordDate ?? row.createdAt.slice(0, 10),
+    createdAt: row.createdAt
+});
 
-
-// Get all feeding records, optionally filtered by date.
 export const getAllFeedingRecords = async (
     date?: string
 ): Promise<FeedingRecord[]> => {
-
     const rows = await feedingRepository.find({
         where: date ? { recordDate: date } : {},
         order: date
@@ -43,12 +45,110 @@ export const getAllFeedingRecords = async (
     return rows.map(formatFeeding);
 };
 
+// Advanced filtering, date range, sorting and pagination.
+export const getFeedingRecordsAdvanced = async (
+    options: FeedingQueryOptions
+) => {
+    const {
+        startDate,
+        endDate,
+        foodName,
+        mealTime,
+        sortBy = "recordDate",
+        order = "DESC",
+        page = 1,
+        limit = 10
+    } = options;
 
-// Create a feeding record.
+    const query = feedingRepository
+        .createQueryBuilder("feeding");
+
+    if (startDate) {
+        query.andWhere("feeding.recordDate >= :startDate", {
+            startDate
+        });
+    }
+
+    if (endDate) {
+        query.andWhere("feeding.recordDate <= :endDate", {
+            endDate
+        });
+    }
+
+    if (foodName) {
+        query.andWhere("LOWER(feeding.foodName) LIKE LOWER(:foodName)", {
+            foodName: `%${foodName}%`
+        });
+    }
+
+    if (mealTime) {
+        query.andWhere("feeding.mealTime = :mealTime", {
+            mealTime
+        });
+    }
+
+    const allowedSortFields = {
+        recordDate: "feeding.recordDate",
+        quantityGrams: "feeding.quantityGrams",
+        foodName: "feeding.foodName"
+    };
+
+    query
+        .orderBy(allowedSortFields[sortBy], order)
+        .addOrderBy("feeding.id", "ASC")
+        .skip((page - 1) * limit)
+        .take(limit);
+
+    const [records, total] = await query.getManyAndCount();
+
+    return {
+        records: records.map(formatFeeding),
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        }
+    };
+};
+
+// Group feeding records by food name.
+export const getFeedingGroupedByFood = async (
+    startDate?: string,
+    endDate?: string
+) => {
+    const query = feedingRepository
+        .createQueryBuilder("feeding")
+        .select("feeding.foodName", "foodName")
+        .addSelect("COUNT(*)", "totalRecords")
+        .addSelect("SUM(feeding.quantityGrams)", "totalGrams")
+        .groupBy("feeding.foodName")
+        .orderBy("totalGrams", "DESC");
+
+    if (startDate) {
+        query.andWhere("feeding.recordDate >= :startDate", {
+            startDate
+        });
+    }
+
+    if (endDate) {
+        query.andWhere("feeding.recordDate <= :endDate", {
+            endDate
+        });
+    }
+
+    const rows = await query.getRawMany();
+
+    return rows.map(row => ({
+        foodName: row.foodName,
+        totalRecords: Number(row.totalRecords),
+        totalGrams: Number(row.totalGrams)
+    }));
+};
+
 export const createFeedingRecord = async (
     input: CreateFeedingInput
 ): Promise<FeedingRecord> => {
-
     const newRecord = feedingRepository.create({
         foodName: input.foodName.trim(),
         quantityGrams: input.quantityGrams,
@@ -58,20 +158,10 @@ export const createFeedingRecord = async (
         recordDate: input.recordDate
     });
 
-    const savedRecord = await feedingRepository.save(newRecord);
-
-    return formatFeeding(savedRecord);
+    return formatFeeding(await feedingRepository.save(newRecord));
 };
 
-
-// Get feeding summary, optionally filtered by date.
-export const getFeedingSummary = async (
-    date?: string
-): Promise<{
-    totalRecords: number;
-    totalGrams: number;
-}> => {
-
+export const getFeedingSummary = async (date?: string) => {
     const query = feedingRepository
         .createQueryBuilder("feeding")
         .select("COUNT(*)", "totalRecords")
@@ -84,10 +174,7 @@ export const getFeedingSummary = async (
         query.where("feeding.recordDate = :date", { date });
     }
 
-    const summary = await query.getRawOne<{
-        totalRecords: string | number;
-        totalGrams: string | number;
-    }>();
+    const summary = await query.getRawOne();
 
     return {
         totalRecords: Number(summary?.totalRecords ?? 0),
@@ -95,96 +182,50 @@ export const getFeedingSummary = async (
     };
 };
 
-
-// Get one feeding record by ID.
 export const getFeedingRecordById = async (
     id: number
 ): Promise<FeedingRecord | null> => {
-
     const row = await feedingRepository.findOneBy({ id });
-
-    if (!row) {
-        return null;
-    }
-
-    return formatFeeding(row);
+    return row ? formatFeeding(row) : null;
 };
 
-
-// Full update: Replace all editable feeding fields.
 export const updateFeedingRecord = async (
     id: number,
     input: CreateFeedingInput
 ): Promise<FeedingRecord | null> => {
+    const result = await feedingRepository.update(id, {
+        foodName: input.foodName.trim(),
+        quantityGrams: input.quantityGrams,
+        mealTime: input.mealTime,
+        notes: input.notes ?? "",
+        recordDate: input.recordDate
+    });
 
-    const record = await feedingRepository.findOneBy({ id });
+    if (!result.affected) return null;
 
-    if (!record) {
-        return null;
-    }
-
-    record.foodName = input.foodName.trim();
-    record.quantityGrams = input.quantityGrams;
-    record.mealTime = input.mealTime;
-    record.notes = input.notes ?? "";
-    record.recordDate = input.recordDate;
-
-    const updatedRecord = await feedingRepository.save(record);
-
-    return formatFeeding(updatedRecord);
+    const updated = await feedingRepository.findOneBy({ id });
+    return updated ? formatFeeding(updated) : null;
 };
 
-
-// Delete a feeding record.
 export const deleteFeedingRecord = async (
     id: number
 ): Promise<boolean> => {
-
-    const record = await feedingRepository.findOneBy({ id });
-
-    if (!record) {
-        return false;
-    }
-
-    await feedingRepository.remove(record);
-
-    return true;
+    const result = await feedingRepository.delete(id);
+    return (result.affected ?? 0) > 0;
 };
 
-
-// Partial update: Update only the fields provided.
 export const patchFeedingRecord = async (
     id: number,
     input: PatchFeedingInput
 ): Promise<FeedingRecord | null> => {
-
     const record = await feedingRepository.findOneBy({ id });
+    if (!record) return null;
 
-    if (!record) {
-        return null;
-    }
+    if (input.foodName !== undefined) record.foodName = input.foodName.trim();
+    if (input.quantityGrams !== undefined) record.quantityGrams = input.quantityGrams;
+    if (input.mealTime !== undefined) record.mealTime = input.mealTime;
+    if (input.notes !== undefined) record.notes = input.notes;
+    if (input.recordDate !== undefined) record.recordDate = input.recordDate;
 
-    if (input.foodName !== undefined) {
-        record.foodName = input.foodName.trim();
-    }
-
-    if (input.quantityGrams !== undefined) {
-        record.quantityGrams = input.quantityGrams;
-    }
-
-    if (input.mealTime !== undefined) {
-        record.mealTime = input.mealTime;
-    }
-
-    if (input.notes !== undefined) {
-        record.notes = input.notes;
-    }
-
-    if (input.recordDate !== undefined) {
-        record.recordDate = input.recordDate;
-    }
-
-    const updatedRecord = await feedingRepository.save(record);
-
-    return formatFeeding(updatedRecord);
+    return formatFeeding(await feedingRepository.save(record));
 };

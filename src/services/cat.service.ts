@@ -15,7 +15,7 @@ const catRepository =
     AppDataSource.getRepository(CatProfileEntity);
 
 
-// Convert TypeORM entity into API response format
+// Convert TypeORM entity into API response format.
 const formatCatProfile = (
     cat: CatProfileEntity
 ): CatProfile => {
@@ -30,55 +30,52 @@ const formatCatProfile = (
 };
 
 
-// Get the cat profile
+// Get the cat profile.
 export const getCatProfile = async (): Promise<CatProfile | null> => {
 
-    const cat = await catRepository.findOneBy({
-        id: 1
-    });
+    const cat = await catRepository.findOneBy({ id: 1 });
 
-    if (!cat) {
-        return null;
-    }
-
-    return formatCatProfile(cat);
+    return cat ? formatCatProfile(cat) : null;
 };
 
 
-// Update selected cat profile fields
+// Update selected cat profile fields using TypeORM update().
 export const updateCatProfile = async (
     input: UpdateCatProfileInput
 ): Promise<CatProfile | null> => {
 
-    const cat = await catRepository.findOneBy({
-        id: 1
-    });
-
-    if (!cat) {
-        return null;
-    }
+    const updateData: Partial<CatProfileEntity> = {};
 
     if (input.name !== undefined) {
-        cat.name = input.name.trim();
+        updateData.name = input.name.trim();
     }
 
     if (input.age !== undefined) {
-        cat.age = input.age;
+        updateData.age = input.age;
     }
 
     if (input.weightKg !== undefined) {
-        cat.weightKg = input.weightKg;
+        updateData.weightKg = input.weightKg;
     }
 
     if (input.favoriteFood !== undefined) {
-        cat.favoriteFood = input.favoriteFood.trim();
+        updateData.favoriteFood = input.favoriteFood.trim();
     }
 
     if (input.activity !== undefined) {
-        cat.activity = input.activity.trim();
+        updateData.activity = input.activity.trim();
     }
 
-    const updatedCat = await catRepository.save(cat);
+    const result = await catRepository.update(
+        { id: 1 },
+        updateData
+    );
 
-    return formatCatProfile(updatedCat);
+    if (!result.affected) {
+        return null;
+    }
+
+    const updatedCat = await catRepository.findOneBy({ id: 1 });
+
+    return updatedCat ? formatCatProfile(updatedCat) : null;
 };

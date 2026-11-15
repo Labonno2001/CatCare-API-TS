@@ -12,6 +12,18 @@ const waterRepository =
     AppDataSource.getRepository(WaterRecordEntity);
 
 
+// Advanced query options
+export interface WaterQueryOptions {
+    startDate?: string;
+    endDate?: string;
+    measured?: boolean;
+    sortBy?: "recordDate" | "offeredMl" | "consumedMl" | "createdAt";
+    order?: "ASC" | "DESC";
+    page?: number;
+    limit?: number;
+}
+
+
 // Convert a TypeORM entity into the API response format.
 const formatWater = (
     row: WaterRecordEntity
@@ -127,50 +139,44 @@ export const getWaterRecordById = async (
 };
 
 
-// Full update: Replace all editable water fields.
+// Full update using TypeORM update().
 export const updateWaterRecord = async (
     id: number,
     input: CreateWaterInput
 ): Promise<WaterRecord | null> => {
 
-    const record = await waterRepository.findOneBy({ id });
+    const result = await waterRepository.update(id, {
+        offeredMl: input.offeredMl,
+        consumedMl: input.measured
+            ? input.consumedMl ?? null
+            : null,
+        measured: input.measured ? 1 : 0,
+        notes: input.notes ?? "",
+        recordDate: input.recordDate
+    });
 
-    if (!record) {
+    if (!result.affected) {
         return null;
     }
 
-    record.offeredMl = input.offeredMl;
-    record.consumedMl = input.measured
-        ? input.consumedMl ?? null
-        : null;
-    record.measured = input.measured ? 1 : 0;
-    record.notes = input.notes ?? "";
-    record.recordDate = input.recordDate;
+    const updatedRecord = await waterRepository.findOneBy({ id });
 
-    const updatedRecord = await waterRepository.save(record);
-
-    return formatWater(updatedRecord);
+    return updatedRecord ? formatWater(updatedRecord) : null;
 };
 
 
-// Delete a water record.
+// Delete using TypeORM delete().
 export const deleteWaterRecord = async (
     id: number
 ): Promise<boolean> => {
 
-    const record = await waterRepository.findOneBy({ id });
+    const result = await waterRepository.delete(id);
 
-    if (!record) {
-        return false;
-    }
-
-    await waterRepository.remove(record);
-
-    return true;
+    return (result.affected ?? 0) > 0;
 };
 
 
-// Partial update: Update only the fields provided.
+// Partial update using findOneBy() and save().
 export const patchWaterRecord = async (
     id: number,
     input: PatchWaterInput
@@ -209,4 +215,140 @@ export const patchWaterRecord = async (
     const updatedRecord = await waterRepository.save(record);
 
     return formatWater(updatedRecord);
+};
+
+
+// ADVANCED QUERY BUILDER
+// Filter, sort and paginate water records.
+export const getWaterRecordsAdvanced = async (
+    options: WaterQueryOptions
+): Promise<{
+    data: WaterRecord[];
+    pagination: {
+        totalRecords: number;
+        currentPage: number;
+        totalPages: number;
+        limit: number;
+    };
+}> => {
+
+    const {
+        startDate,
+        endDate,
+        measured,
+        sortBy = "recordDate",
+        order = "DESC",
+        page = 1,
+        limit = 10
+    } = options;
+
+    const query = waterRepository
+        .createQueryBuilder("water");
+
+    // Date range filtering
+    if (startDate) {
+        query.andWhere(
+            "water.recordDate >= :startDate",
+            { startDate }
+        );
+    }
+
+    if (endDate) {
+        query.andWhere(
+            "water.recordDate <= :endDate",
+            { endDate }
+        );
+    }
+
+    // Filter measured or unmeasured records
+    if (measured !== undefined) {
+        query.andWhere(
+            "water.measured = :measured",
+            { measured: measured ? 1 : 0 }
+        );
+    }
+
+    // Allow only approved sorting columns
+    const sortColumns = {
+        recordDate: "water.recordDate",
+        offeredMl: "water.offeredMl",
+        consumedMl: "water.consumedMl",
+        createdAt: "water.createdAt"
+    };
+
+    query.orderBy(sortColumns[sortBy], order);
+    query.addOrderBy("water.id", "ASC");
+
+    // Pagination
+    query.skip((page - 1) * limit);
+    query.take(limit);
+
+    const [records, totalRecords] =
+        await query.getManyAndCount();
+
+    return {
+        data: records.map(formatWater),
+        pagination: {
+            totalRecords,
+            currentPage: page,
+            totalPages: Math.ceil(totalRecords / limit),
+            limit
+        }
+    };
+};
+
+
+// GROUP BY measured status
+export const getWaterGroupedByMeasurement = async (
+    startDate?: string,
+    endDate?: string
+): Promise<{
+    measured: boolean;
+    totalRecords: number;
+    totalOfferedMl: number;
+    totalConsumedMl: number;
+}[]> => {
+
+    const query = waterRepository
+        .createQueryBuilder("water")
+        .select("water.measured", "measured")
+        .addSelect("COUNT(*)", "totalRecords")
+        .addSelect(
+            "COALESCE(SUM(water.offeredMl), 0)",
+            "totalOfferedMl"
+        )
+        .addSelect(
+            "COALESCE(SUM(water.consumedMl), 0)",
+            "totalConsumedMl"
+        )
+        .groupBy("water.measured")
+        .orderBy("water.measured", "DESC");
+
+    if (startDate) {
+        query.andWhere(
+            "water.recordDate >= :startDate",
+            { startDate }
+        );
+    }
+
+    if (endDate) {
+        query.andWhere(
+            "water.recordDate <= :endDate",
+            { endDate }
+        );
+    }
+
+    const results = await query.getRawMany<{
+        measured: number;
+        totalRecords: string | number;
+        totalOfferedMl: string | number;
+        totalConsumedMl: string | number;
+    }>();
+
+    return results.map((row) => ({
+        measured: Boolean(row.measured),
+        totalRecords: Number(row.totalRecords),
+        totalOfferedMl: Number(row.totalOfferedMl),
+        totalConsumedMl: Number(row.totalConsumedMl)
+    }));
 };

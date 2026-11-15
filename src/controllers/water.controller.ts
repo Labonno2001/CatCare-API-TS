@@ -8,7 +8,10 @@ import {
     getWaterRecordById,
     updateWaterRecord,
     patchWaterRecord,
-    deleteWaterRecord
+    deleteWaterRecord,
+    getWaterRecordsAdvanced,
+    getWaterGroupedByMeasurement,
+    WaterQueryOptions
 } from "../services/water.service";
 
 import { PatchWaterInput } from "../types/water.types";
@@ -47,6 +50,20 @@ const isValidNonNegativeNumber = (
     return (
         Number.isFinite(Number(value)) &&
         Number(value) >= 0
+    );
+};
+
+
+// Validate positive integer query parameters
+const isPositiveInteger = (
+    value: unknown
+): boolean => {
+
+    return (
+        typeof value === "string" &&
+        /^\d+$/.test(value) &&
+        Number(value) > 0 &&
+        Number.isSafeInteger(Number(value))
     );
 };
 
@@ -492,5 +509,235 @@ export const deleteWaterRecordController = async (
     res.status(200).json({
         success: true,
         message: "Water record deleted!"
+    });
+};
+
+
+// GET advanced water records
+export const getAdvancedWaterRecordsController = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    const {
+        startDate,
+        endDate,
+        measured,
+        sortBy,
+        order,
+        page,
+        limit
+    } = req.query;
+
+    // Validate query parameter types
+    const queryValues = [
+        startDate,
+        endDate,
+        measured,
+        sortBy,
+        order,
+        page,
+        limit
+    ];
+
+    if (queryValues.some(value =>
+        value !== undefined && typeof value !== "string"
+    )) {
+        res.status(400).json({
+            success: false,
+            message: "Each query parameter must have one value."
+        });
+        return;
+    }
+
+    if (
+        startDate !== undefined &&
+        !isValidDate(startDate)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid startDate. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    if (
+        endDate !== undefined &&
+        !isValidDate(endDate)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid endDate. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    if (
+        startDate !== undefined &&
+        endDate !== undefined &&
+        startDate > endDate
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "startDate cannot be later than endDate."
+        });
+        return;
+    }
+
+    let measuredValue: boolean | undefined;
+
+    if (measured !== undefined) {
+
+        if (measured !== "true" && measured !== "false") {
+            res.status(400).json({
+                success: false,
+                message: "measured must be true or false."
+            });
+            return;
+        }
+
+        measuredValue = measured === "true";
+    }
+
+    const allowedSortFields = [
+        "recordDate",
+        "offeredMl",
+        "consumedMl",
+        "createdAt"
+    ];
+
+    // FIXED: Check that sortBy is a string before includes()
+    if (
+        sortBy !== undefined &&
+        (
+            typeof sortBy !== "string" ||
+            !allowedSortFields.includes(sortBy)
+        )
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid sortBy field."
+        });
+        return;
+    }
+
+    if (
+        order !== undefined &&
+        order !== "ASC" &&
+        order !== "DESC"
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "order must be ASC or DESC."
+        });
+        return;
+    }
+
+    if (
+        page !== undefined &&
+        !isPositiveInteger(page)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "page must be a positive integer."
+        });
+        return;
+    }
+
+    if (
+        limit !== undefined &&
+        (
+            !isPositiveInteger(limit) ||
+            Number(limit) > 100
+        )
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "limit must be between 1 and 100."
+        });
+        return;
+    }
+
+    const options: WaterQueryOptions = {
+        startDate: startDate as string | undefined,
+        endDate: endDate as string | undefined,
+        measured: measuredValue,
+        sortBy: sortBy as WaterQueryOptions["sortBy"],
+        order: order as WaterQueryOptions["order"],
+        page: page === undefined ? 1 : Number(page),
+        limit: limit === undefined ? 10 : Number(limit)
+    };
+
+    const result = await getWaterRecordsAdvanced(options);
+
+    res.status(200).json({
+        success: true,
+        ...result
+    });
+};
+
+
+// GET water records grouped by measurement status
+export const getWaterGroupedController = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    const { startDate, endDate } = req.query;
+
+    if (
+        (startDate !== undefined && typeof startDate !== "string") ||
+        (endDate !== undefined && typeof endDate !== "string")
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Each date parameter must have one value."
+        });
+        return;
+    }
+
+    if (
+        startDate !== undefined &&
+        !isValidDate(startDate)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid startDate. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    if (
+        endDate !== undefined &&
+        !isValidDate(endDate)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid endDate. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    if (
+        startDate !== undefined &&
+        endDate !== undefined &&
+        startDate > endDate
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "startDate cannot be later than endDate."
+        });
+        return;
+    }
+
+    const results = await getWaterGroupedByMeasurement(
+        startDate as string | undefined,
+        endDate as string | undefined
+    );
+
+    res.status(200).json({
+        success: true,
+        count: results.length,
+        groups: results
     });
 };

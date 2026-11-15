@@ -5,7 +5,6 @@ import dotenv from "dotenv";
 import path from "node:path";
 
 import { AppDataSource } from "./database/data-source";
-import { initializeDatabase } from "./database/initialize-database";
 
 import catRoutes from "./routes/cat.routes";
 import feedingRoutes from "./routes/feeding.routes";
@@ -63,18 +62,26 @@ app.use(errorHandler);
 // Server configuration.
 const PORT = process.env.PORT || 3000;
 
+
 // Start server.
 const startServer = async (): Promise<void> => {
+
     try {
+
         // Connect TypeORM to SQLite.
         if (!AppDataSource.isInitialized) {
             await AppDataSource.initialize();
         }
 
-        // Initialize database tables and preserve existing records.
-        await initializeDatabase();
-
         console.log("TypeORM connected successfully!");
+
+        // Execute pending database migrations.
+        await AppDataSource.runMigrations();
+
+        console.log("Database migrations completed successfully!");
+
+        // Enable SQLite foreign key constraints.
+        await AppDataSource.query("PRAGMA foreign_keys = ON");
 
         console.log(
             "Registered entities:",
@@ -89,7 +96,13 @@ const startServer = async (): Promise<void> => {
         });
 
     } catch (error) {
+
         console.error("Failed to start CatCare API:", error);
+
+        if (AppDataSource.isInitialized) {
+            await AppDataSource.destroy();
+        }
+
         process.exit(1);
     }
 };

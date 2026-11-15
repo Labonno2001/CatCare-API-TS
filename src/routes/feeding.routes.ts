@@ -8,7 +8,9 @@ import {
     getFeedingRecordByIdController,
     updateFeedingRecordController,
     patchFeedingRecordController,
-    deleteFeedingRecordController
+    deleteFeedingRecordController,
+    getAdvancedFeedingRecordsController,
+    getFeedingGroupedByFoodController
 } from "../controllers/feeding.controller";
 
 const router = Router();
@@ -16,10 +18,16 @@ const router = Router();
 // GET feeding summary
 router.get("/summary", getFeedingSummaryController);
 
+// GET advanced feeding records
+router.get("/advanced", getAdvancedFeedingRecordsController);
+
+// GET feeding records grouped by food
+router.get("/grouped", getFeedingGroupedByFoodController);
+
 // GET all feeding records
 router.get("/", getAllFeedingRecordsController);
 
-// POST a feeding record
+// POST a new feeding record
 router.post("/", createFeedingRecordController);
 
 // GET one feeding record by ID

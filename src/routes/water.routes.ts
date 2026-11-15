@@ -8,30 +8,26 @@ import {
     getWaterRecordByIdController,
     updateWaterRecordController,
     patchWaterRecordController,
-    deleteWaterRecordController
+    deleteWaterRecordController,
+    getAdvancedWaterRecordsController,
+    getWaterGroupedController
 } from "../controllers/water.controller";
 
 const router = Router();
 
-// GET water summary
+// Summary
 router.get("/summary", getWaterSummaryController);
 
-// GET all water records
+// Advanced QueryBuilder endpoints
+router.get("/advanced", getAdvancedWaterRecordsController);
+router.get("/grouped", getWaterGroupedController);
+
+// CRUD endpoints
 router.get("/", getAllWaterRecordsController);
-
-// POST a new water record
 router.post("/", createWaterRecordController);
-
-// GET one water record by ID
 router.get("/:id", getWaterRecordByIdController);
-
-// PUT: Replace the complete water record
 router.put("/:id", updateWaterRecordController);
-
-// PATCH: Update selected water fields
 router.patch("/:id", patchWaterRecordController);
-
-// DELETE a water record
 router.delete("/:id", deleteWaterRecordController);
 
 export default router;

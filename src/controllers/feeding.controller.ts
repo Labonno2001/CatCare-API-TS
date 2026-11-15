@@ -8,7 +8,9 @@ import {
     getFeedingRecordById,
     updateFeedingRecord,
     patchFeedingRecord,
-    deleteFeedingRecord
+    deleteFeedingRecord,
+    getFeedingRecordsAdvanced,
+    getFeedingGroupedByFood
 } from "../services/feeding.service";
 
 import { PatchFeedingInput } from "../types/feeding.types";
@@ -28,7 +30,7 @@ interface FeedingInputBody {
 }
 
 
-// Validate a complete feeding record (PUT and POST)
+// Validate complete feeding record.
 const isValidFeedingInput = (
     body: unknown
 ): body is FeedingInputBody => {
@@ -63,7 +65,7 @@ const isValidFeedingInput = (
 };
 
 
-// Validate a partial feeding update (PATCH)
+// Validate partial feeding update.
 const isValidFeedingPatch = (
     body: unknown
 ): body is Record<string, unknown> => {
@@ -149,7 +151,18 @@ const isValidFeedingPatch = (
 };
 
 
-// GET all feeding records, optionally filtered by date
+// Validate positive integer query parameters.
+const isPositiveInteger = (value: unknown): boolean => {
+    return (
+        typeof value === "string" &&
+        /^\d+$/.test(value) &&
+        Number.isSafeInteger(Number(value)) &&
+        Number(value) > 0
+    );
+};
+
+
+// GET all feeding records.
 export const getAllFeedingRecordsController = async (
     req: Request,
     res: Response
@@ -157,7 +170,10 @@ export const getAllFeedingRecordsController = async (
 
     const date = req.query.date;
 
-    if (date !== undefined && !isValidDate(date)) {
+    if (date !== undefined && (
+        typeof date !== "string" ||
+        !isValidDate(date)
+    )) {
         res.status(400).json({
             success: false,
             message: "Invalid date. Use YYYY-MM-DD."
@@ -177,7 +193,167 @@ export const getAllFeedingRecordsController = async (
 };
 
 
-// POST a feeding record
+// GET advanced feeding records.
+export const getAdvancedFeedingRecordsController = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    const {
+        startDate,
+        endDate,
+        foodName,
+        mealTime,
+        sortBy,
+        order,
+        page,
+        limit
+    } = req.query;
+
+    if (
+        (startDate !== undefined &&
+            (typeof startDate !== "string" || !isValidDate(startDate))) ||
+        (endDate !== undefined &&
+            (typeof endDate !== "string" || !isValidDate(endDate)))
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid date. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    if (
+        typeof startDate === "string" &&
+        typeof endDate === "string" &&
+        startDate > endDate
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "startDate cannot be later than endDate."
+        });
+        return;
+    }
+
+    if (
+        foodName !== undefined &&
+        (typeof foodName !== "string" || !foodName.trim())
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid foodName."
+        });
+        return;
+    }
+
+    if (
+        mealTime !== undefined &&
+        (typeof mealTime !== "string" || !mealTime.trim())
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid mealTime."
+        });
+        return;
+    }
+
+    if (
+        sortBy !== undefined &&
+        !["recordDate", "quantityGrams", "foodName"].includes(sortBy as string)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid sortBy field."
+        });
+        return;
+    }
+
+    if (
+        order !== undefined &&
+        !["ASC", "DESC"].includes(order as string)
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "order must be ASC or DESC."
+        });
+        return;
+    }
+
+    if (
+        (page !== undefined && !isPositiveInteger(page)) ||
+        (limit !== undefined && !isPositiveInteger(limit))
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "page and limit must be positive integers."
+        });
+        return;
+    }
+
+    const result = await getFeedingRecordsAdvanced({
+        startDate: startDate as string | undefined,
+        endDate: endDate as string | undefined,
+        foodName: foodName as string | undefined,
+        mealTime: mealTime as string | undefined,
+        sortBy: sortBy as "recordDate" | "quantityGrams" | "foodName" | undefined,
+        order: order as "ASC" | "DESC" | undefined,
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined
+    });
+
+    res.status(200).json({
+        success: true,
+        ...result
+    });
+};
+
+
+// GET feeding records grouped by food.
+export const getFeedingGroupedByFoodController = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    const { startDate, endDate } = req.query;
+
+    if (
+        (startDate !== undefined &&
+            (typeof startDate !== "string" || !isValidDate(startDate))) ||
+        (endDate !== undefined &&
+            (typeof endDate !== "string" || !isValidDate(endDate)))
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "Invalid date. Use YYYY-MM-DD."
+        });
+        return;
+    }
+
+    if (
+        typeof startDate === "string" &&
+        typeof endDate === "string" &&
+        startDate > endDate
+    ) {
+        res.status(400).json({
+            success: false,
+            message: "startDate cannot be later than endDate."
+        });
+        return;
+    }
+
+    const groups = await getFeedingGroupedByFood(
+        startDate as string | undefined,
+        endDate as string | undefined
+    );
+
+    res.status(200).json({
+        success: true,
+        groups
+    });
+};
+
+
+// POST a feeding record.
 export const createFeedingRecordController = async (
     req: Request,
     res: Response
@@ -215,7 +391,7 @@ export const createFeedingRecordController = async (
 };
 
 
-// GET feeding summary, optionally filtered by date
+// GET feeding summary.
 export const getFeedingSummaryController = async (
     req: Request,
     res: Response
@@ -223,7 +399,10 @@ export const getFeedingSummaryController = async (
 
     const date = req.query.date;
 
-    if (date !== undefined && !isValidDate(date)) {
+    if (date !== undefined && (
+        typeof date !== "string" ||
+        !isValidDate(date)
+    )) {
         res.status(400).json({
             success: false,
             message: "Invalid date. Use YYYY-MM-DD."
@@ -242,7 +421,7 @@ export const getFeedingSummaryController = async (
 };
 
 
-// GET one feeding record by ID
+// GET one feeding record by ID.
 export const getFeedingRecordByIdController = async (
     req: Request,
     res: Response
@@ -275,7 +454,7 @@ export const getFeedingRecordByIdController = async (
 };
 
 
-// PUT: Replace all editable feeding fields
+// PUT: Replace all editable feeding fields.
 export const updateFeedingRecordController = async (
     req: Request,
     res: Response
@@ -332,7 +511,7 @@ export const updateFeedingRecordController = async (
 };
 
 
-// PATCH: Update only selected feeding fields
+// PATCH: Update selected feeding fields.
 export const patchFeedingRecordController = async (
     req: Request,
     res: Response
@@ -355,28 +534,13 @@ export const patchFeedingRecordController = async (
     }
 
     const body = req.body as Record<string, unknown>;
-
     const input: PatchFeedingInput = {};
 
-    if (body.foodName !== undefined) {
-        input.foodName = body.foodName as string;
-    }
-
-    if (body.quantityGrams !== undefined) {
-        input.quantityGrams = Number(body.quantityGrams);
-    }
-
-    if (body.mealTime !== undefined) {
-        input.mealTime = body.mealTime as string;
-    }
-
-    if (body.notes !== undefined) {
-        input.notes = body.notes as string;
-    }
-
-    if (body.recordDate !== undefined) {
-        input.recordDate = body.recordDate as string;
-    }
+    if (body.foodName !== undefined) input.foodName = body.foodName as string;
+    if (body.quantityGrams !== undefined) input.quantityGrams = Number(body.quantityGrams);
+    if (body.mealTime !== undefined) input.mealTime = body.mealTime as string;
+    if (body.notes !== undefined) input.notes = body.notes as string;
+    if (body.recordDate !== undefined) input.recordDate = body.recordDate as string;
 
     const record = await patchFeedingRecord(
         Number(req.params.id),
@@ -399,7 +563,7 @@ export const patchFeedingRecordController = async (
 };
 
 
-// DELETE a feeding record
+// DELETE a feeding record.
 export const deleteFeedingRecordController = async (
     req: Request,
     res: Response

@@ -8,6 +8,7 @@ import {
 
 import { FeedingRecord } from "./FeedingRecord";
 import { WaterRecord } from "./WaterRecord";
+import { WaterDailyTarget } from "./WaterDailyTarget";
 
 @Entity("cat_profile")
 export class CatProfileEntity {
@@ -36,6 +37,7 @@ export class CatProfileEntity {
     @Column({ type: "text" })
     activity!: string;
 
+
     // One cat can have many feeding records.
     @OneToMany(
         () => FeedingRecord,
@@ -43,10 +45,20 @@ export class CatProfileEntity {
     )
     feedingRecords!: FeedingRecord[];
 
-    // One cat can have many water records.
+
+    // One cat can have many individual water records.
     @OneToMany(
         () => WaterRecord,
         (waterRecord) => waterRecord.cat
     )
     waterRecords!: WaterRecord[];
+
+
+    // One cat can have many daily water targets.
+    // Each target represents one specific date.
+    @OneToMany(
+        () => WaterDailyTarget,
+        (target) => target.cat
+    )
+    waterDailyTargets!: WaterDailyTarget[];
 }

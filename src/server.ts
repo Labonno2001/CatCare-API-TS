@@ -62,43 +62,53 @@ app.use(errorHandler);
 // Server configuration.
 const PORT = process.env.PORT || 3000;
 
-
 // Start server.
 const startServer = async (): Promise<void> => {
-
     try {
-
-        // Connect TypeORM to SQLite.
+        // 1. Initialize TypeORM connection.
         if (!AppDataSource.isInitialized) {
             await AppDataSource.initialize();
         }
 
         console.log("TypeORM connected successfully!");
 
-        // Execute pending database migrations.
-        await AppDataSource.runMigrations();
+        // 2. Enable SQLite foreign key constraints.
+        await AppDataSource.query("PRAGMA foreign_keys = ON");
+
+        console.log("SQLite foreign key constraints enabled.");
+
+        // 3. Execute pending database migrations.
+        const executedMigrations = await AppDataSource.runMigrations();
+
+        if (executedMigrations.length > 0) {
+            console.log("Successfully executed migrations:");
+
+            executedMigrations.forEach((migration) => {
+                console.log(`- ${migration.name}`);
+            });
+        } else {
+            console.log("No pending migrations.");
+        }
 
         console.log("Database migrations completed successfully!");
 
-        // Enable SQLite foreign key constraints.
-        await AppDataSource.query("PRAGMA foreign_keys = ON");
-
+        // 4. Display registered entities.
         console.log(
             "Registered entities:",
             AppDataSource.entityMetadatas
-                .map(entity => entity.name)
+                .map((entity) => entity.name)
                 .join(", ")
         );
 
-        // Start Express server.
+        // 5. Start Express server.
         app.listen(PORT, () => {
             console.log(`CatCare API running on port ${PORT}`);
         });
 
     } catch (error) {
-
         console.error("Failed to start CatCare API:", error);
 
+        // Close database connection if initialization succeeded.
         if (AppDataSource.isInitialized) {
             await AppDataSource.destroy();
         }
@@ -107,4 +117,5 @@ const startServer = async (): Promise<void> => {
     }
 };
 
+// Start application.
 void startServer();

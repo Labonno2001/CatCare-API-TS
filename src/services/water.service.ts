@@ -2,264 +2,333 @@
 import { AppDataSource } from "../database/data-source";
 
 import { WaterRecord as WaterRecordEntity } from "../entities/WaterRecord";
+import { WaterDailyTarget as WaterDailyTargetEntity } from "../entities/WaterDailyTarget";
 import { CatProfileEntity } from "../entities/CatProfile";
 
-import {
+import type {
     WaterRecord,
     CreateWaterInput,
-    PatchWaterInput
+    PatchWaterInput,
+    WaterDailyTarget,
+    CreateWaterDailyTargetInput,
+    WaterDailySummary
 } from "../types/water.types";
 
+// --------------------------------------------------
+// Repositories
+// --------------------------------------------------
 
-const waterRepository =
-    AppDataSource.getRepository(WaterRecordEntity);
+const waterRepository = AppDataSource.getRepository(WaterRecordEntity);
+const dailyTargetRepository = AppDataSource.getRepository(WaterDailyTargetEntity);
+const catRepository = AppDataSource.getRepository(CatProfileEntity);
 
-const catRepository =
-    AppDataSource.getRepository(CatProfileEntity);
+// --------------------------------------------------
+// Advanced query options
+// --------------------------------------------------
 
-
-// Query options for filtering, sorting and pagination.
 export interface WaterQueryOptions {
     startDate?: string;
     endDate?: string;
     measured?: boolean;
-    sortBy?: "recordDate" | "offeredMl" | "consumedMl" | "createdAt";
+    minConsumedMl?: number;
+    maxConsumedMl?: number;
+    sortBy?: "recordDate" | "consumedMl" | "createdAt";
     order?: "ASC" | "DESC";
     page?: number;
     limit?: number;
 }
 
+// --------------------------------------------------
+// Format water record
+// --------------------------------------------------
 
-// Convert TypeORM entity into API response format.
-const formatWater = (
-    row: WaterRecordEntity
-): WaterRecord => {
+const formatWater = (record: WaterRecordEntity): WaterRecord => ({
+    id: record.id,
+    consumedMl: record.consumedMl,
+    measured: record.measured === 1,
+    notes: record.notes,
+    recordDate: record.recordDate ?? "",
+    createdAt: record.createdAt
+});
 
-    return {
-        id: row.id,
-        offeredMl: row.offeredMl,
-        consumedMl: row.consumedMl,
-        measured: Boolean(row.measured),
-        notes: row.notes,
-        recordDate: row.recordDate ?? row.createdAt.slice(0, 10),
-        createdAt: row.createdAt
-    };
-};
+// --------------------------------------------------
+// Format daily target
+// --------------------------------------------------
 
+const formatDailyTarget = (
+    target: WaterDailyTargetEntity
+): WaterDailyTarget => ({
+    id: target.id,
+    catId: target.cat.id,
+    offeredMl: target.offeredMl,
+    recordDate: target.recordDate,
+    createdAt: target.createdAt,
+    updatedAt: target.updatedAt
+});
 
-// Find the default cat.
+// --------------------------------------------------
+// Get default cat
+// --------------------------------------------------
+
 const getDefaultCat = async (): Promise<CatProfileEntity> => {
-
-    const cat = await catRepository.findOneBy({
-        id: 1
-    });
+    const cat = await catRepository.findOneBy({ id: 1 });
 
     if (!cat) {
-        throw new Error(
-            "Default cat profile (Mini, ID 1) not found."
-        );
+        throw new Error("Default cat not found");
     }
 
     return cat;
 };
 
+// --------------------------------------------------
+// GET all water records
+// --------------------------------------------------
 
-// GET ALL WATER RECORDS
-export const getAllWaterRecords = async (
-    date?: string
-): Promise<WaterRecord[]> => {
+export const getAllWaterRecords = async (): Promise<WaterRecord[]> => {
+    const cat = await getDefaultCat();
 
-    const rows = await waterRepository.find({
-
-        where: date
-            ? { recordDate: date }
-            : {},
-
-        order: date
-            ? { id: "ASC" }
-            : { recordDate: "DESC", id: "ASC" }
+    const records = await waterRepository.find({
+        where: {
+            cat: { id: cat.id }
+        },
+        order: {
+            id: "DESC"
+        }
     });
 
-    return rows.map(formatWater);
+    return records.map(formatWater);
 };
 
+// --------------------------------------------------
+// CREATE water consumption record
+// --------------------------------------------------
 
-// CREATE WATER RECORD
 export const createWaterRecord = async (
     input: CreateWaterInput
 ): Promise<WaterRecord> => {
-
-    // Find Mini before creating the record.
     const cat = await getDefaultCat();
 
-    // Create a new water record.
     const newRecord = waterRepository.create({
+        // Temporary compatibility with the old NOT NULL database column.
+        // Offered water is stored separately in water_daily_targets.
+        // This value does NOT change the daily offered water target.
+        offeredMl: 0,
 
-        offeredMl: input.offeredMl,
-
-        consumedMl: input.measured
-            ? input.consumedMl ?? null
-            : null,
-
+        consumedMl: input.measured ? input.consumedMl ?? null : null,
         measured: input.measured ? 1 : 0,
-
         notes: input.notes ?? "",
-
-        createdAt: new Date().toISOString(),
-
         recordDate: input.recordDate,
-
-        // Assign the required cat relationship.
-        cat: cat
+        createdAt: new Date().toISOString(),
+        cat
     });
 
-    // Save the record in SQLite.
-    const savedRecord =
-        await waterRepository.save(newRecord);
+    const savedRecord = await waterRepository.save(newRecord);
 
     return formatWater(savedRecord);
 };
 
+// --------------------------------------------------
+// GET daily offered water target
+// --------------------------------------------------
 
-// GET WATER SUMMARY
-export const getWaterSummary = async (
-    date?: string
-): Promise<{
-    totalRecords: number;
-    totalOfferedMl: number;
-    measuredConsumptionRecords: number;
-    totalMeasuredConsumedMl: number;
-}> => {
+export const getWaterDailyTarget = async (
+    recordDate: string
+): Promise<WaterDailyTarget | null> => {
+    const cat = await getDefaultCat();
 
-    const query = waterRepository
-        .createQueryBuilder("water")
-        .select("COUNT(*)", "totalRecords")
-        .addSelect(
-            "COALESCE(SUM(water.offeredMl), 0)",
-            "totalOfferedMl"
-        )
-        .addSelect(
-            "COALESCE(SUM(CASE WHEN water.measured = 1 THEN 1 ELSE 0 END), 0)",
-            "measuredConsumptionRecords"
-        )
-        .addSelect(
-            "COALESCE(SUM(CASE WHEN water.measured = 1 THEN water.consumedMl ELSE 0 END), 0)",
-            "totalMeasuredConsumedMl"
-        );
+    const target = await dailyTargetRepository.findOne({
+        where: {
+            cat: { id: cat.id },
+            recordDate
+        },
+        relations: {
+            cat: true
+        }
+    });
 
-    if (date) {
-        query.where(
-            "water.recordDate = :date",
-            { date }
-        );
+    return target ? formatDailyTarget(target) : null;
+};
+
+// --------------------------------------------------
+// CREATE or UPDATE daily offered water target
+// --------------------------------------------------
+
+export const saveWaterDailyTarget = async (
+    input: CreateWaterDailyTargetInput
+): Promise<WaterDailyTarget> => {
+    const cat = await getDefaultCat();
+
+    if (!Number.isFinite(input.offeredMl) || input.offeredMl < 0) {
+        throw new Error("Offered water must be a non-negative number");
     }
 
-    const summary = await query.getRawOne<{
-        totalRecords: string | number;
-        totalOfferedMl: string | number;
-        measuredConsumptionRecords: string | number;
-        totalMeasuredConsumedMl: string | number;
-    }>();
+    const existingTarget = await dailyTargetRepository.findOne({
+        where: {
+            cat: { id: cat.id },
+            recordDate: input.recordDate
+        },
+        relations: {
+            cat: true
+        }
+    });
+
+    const now = new Date().toISOString();
+
+    // If a target already exists for this date,
+    // update that target instead of creating another one.
+    if (existingTarget) {
+        existingTarget.offeredMl = input.offeredMl;
+        existingTarget.updatedAt = now;
+
+        const updatedTarget = await dailyTargetRepository.save(existingTarget);
+
+        return formatDailyTarget(updatedTarget);
+    }
+
+    // Create a new daily target if one does not exist.
+    const newTarget = dailyTargetRepository.create({
+        cat,
+        recordDate: input.recordDate,
+        offeredMl: input.offeredMl,
+        createdAt: now,
+        updatedAt: now
+    });
+
+    const savedTarget = await dailyTargetRepository.save(newTarget);
+
+    return formatDailyTarget(savedTarget);
+};
+
+// --------------------------------------------------
+// GET water summary for a specific date
+// --------------------------------------------------
+
+export const getWaterSummary = async (
+    recordDate: string
+): Promise<WaterDailySummary> => {
+    const cat = await getDefaultCat();
+
+    // Get consumption records for the requested date.
+    const waterResult = await waterRepository
+        .createQueryBuilder("water")
+        .innerJoin("water.cat", "cat")
+        .where("cat.id = :catId", { catId: cat.id })
+        .andWhere("water.recordDate = :recordDate", { recordDate })
+        .select("COUNT(water.id)", "totalRecords")
+        .addSelect(
+            `COALESCE(
+                SUM(CASE WHEN water.measured = 1 THEN 1 ELSE 0 END),
+                0
+            )`,
+            "measuredRecords"
+        )
+        .addSelect(
+            `COALESCE(
+                SUM(
+                    CASE
+                        WHEN water.measured = 1
+                        THEN COALESCE(water.consumedMl, 0)
+                        ELSE 0
+                    END
+                ),
+                0
+            )`,
+            "totalConsumedMl"
+        )
+        .getRawOne();
+
+    // Get the single offered water target for the requested date.
+    const target = await dailyTargetRepository.findOne({
+        where: {
+            cat: { id: cat.id },
+            recordDate
+        }
+    });
+
+    const offeredMl = Number(target?.offeredMl ?? 0);
+    const totalConsumedMl = Number(waterResult?.totalConsumedMl ?? 0);
 
     return {
-
-        totalRecords: Number(
-            summary?.totalRecords ?? 0
-        ),
-
-        totalOfferedMl: Number(
-            summary?.totalOfferedMl ?? 0
-        ),
-
-        measuredConsumptionRecords: Number(
-            summary?.measuredConsumptionRecords ?? 0
-        ),
-
-        totalMeasuredConsumedMl: Number(
-            summary?.totalMeasuredConsumedMl ?? 0
-        )
+        recordDate,
+        offeredMl,
+        totalConsumedMl,
+        remainingMl: offeredMl - totalConsumedMl,
+        totalRecords: Number(waterResult?.totalRecords ?? 0),
+        measuredRecords: Number(waterResult?.measuredRecords ?? 0)
     };
 };
 
+// --------------------------------------------------
+// GET one water record by ID
+// --------------------------------------------------
 
-// GET ONE WATER RECORD BY ID
 export const getWaterRecordById = async (
     id: number
 ): Promise<WaterRecord | null> => {
+    const cat = await getDefaultCat();
 
-    const row = await waterRepository.findOneBy({
-        id
+    const record = await waterRepository.findOne({
+        where: {
+            id,
+            cat: { id: cat.id }
+        }
     });
 
-    if (!row) {
-        return null;
-    }
-
-    return formatWater(row);
+    return record ? formatWater(record) : null;
 };
 
+// --------------------------------------------------
+// UPDATE water record (PUT)
+// --------------------------------------------------
 
-// FULL UPDATE USING PUT
 export const updateWaterRecord = async (
     id: number,
     input: CreateWaterInput
 ): Promise<WaterRecord | null> => {
+    const cat = await getDefaultCat();
 
-    const result = await waterRepository.update(id, {
-
-        offeredMl: input.offeredMl,
-
-        consumedMl: input.measured
-            ? input.consumedMl ?? null
-            : null,
-
-        measured: input.measured ? 1 : 0,
-
-        notes: input.notes ?? "",
-
-        recordDate: input.recordDate
-    });
-
-    if (!result.affected) {
-        return null;
-    }
-
-    const updatedRecord =
-        await waterRepository.findOneBy({ id });
-
-    return updatedRecord
-        ? formatWater(updatedRecord)
-        : null;
-};
-
-
-// DELETE WATER RECORD
-export const deleteWaterRecord = async (
-    id: number
-): Promise<boolean> => {
-
-    const result = await waterRepository.delete(id);
-
-    return (result.affected ?? 0) > 0;
-};
-
-
-// PARTIAL UPDATE USING PATCH
-export const patchWaterRecord = async (
-    id: number,
-    input: PatchWaterInput
-): Promise<WaterRecord | null> => {
-
-    const record = await waterRepository.findOneBy({
-        id
+    const record = await waterRepository.findOne({
+        where: {
+            id,
+            cat: { id: cat.id }
+        }
     });
 
     if (!record) {
         return null;
     }
 
-    if (input.offeredMl !== undefined) {
-        record.offeredMl = input.offeredMl;
+    // PUT changes only the individual consumption record.
+    // It never modifies the daily offered water target.
+    record.consumedMl = input.measured ? input.consumedMl ?? null : null;
+    record.measured = input.measured ? 1 : 0;
+    record.notes = input.notes ?? "";
+    record.recordDate = input.recordDate;
+
+    const updatedRecord = await waterRepository.save(record);
+
+    return formatWater(updatedRecord);
+};
+
+// --------------------------------------------------
+// PATCH water record
+// --------------------------------------------------
+
+export const patchWaterRecord = async (
+    id: number,
+    input: PatchWaterInput
+): Promise<WaterRecord | null> => {
+    const cat = await getDefaultCat();
+
+    const record = await waterRepository.findOne({
+        where: {
+            id,
+            cat: { id: cat.id }
+        }
+    });
+
+    if (!record) {
+        return null;
     }
 
     if (input.consumedMl !== undefined) {
@@ -267,10 +336,10 @@ export const patchWaterRecord = async (
     }
 
     if (input.measured !== undefined) {
-
         record.measured = input.measured ? 1 : 0;
 
-        if (input.measured === false) {
+        // If measurement is disabled, clear the old intake amount.
+        if (!input.measured) {
             record.consumedMl = null;
         }
     }
@@ -283,150 +352,164 @@ export const patchWaterRecord = async (
         record.recordDate = input.recordDate;
     }
 
-    const updatedRecord =
-        await waterRepository.save(record);
+    // PATCH changes only the individual consumption record.
+    // It never modifies the daily offered water target.
+    const updatedRecord = await waterRepository.save(record);
 
     return formatWater(updatedRecord);
 };
 
+// --------------------------------------------------
+// DELETE water record
+// --------------------------------------------------
 
-// ADVANCED FILTERING, SORTING AND PAGINATION
-export const getWaterRecordsAdvanced = async (
-    options: WaterQueryOptions
-): Promise<{
-    data: WaterRecord[];
-    pagination: {
-        totalRecords: number;
-        currentPage: number;
-        totalPages: number;
-        limit: number;
-    };
-}> => {
+export const deleteWaterRecord = async (
+    id: number
+): Promise<boolean> => {
+    const cat = await getDefaultCat();
 
-    const {
-        startDate,
-        endDate,
-        measured,
-        sortBy = "recordDate",
-        order = "DESC",
-        page = 1,
-        limit = 10
-    } = options;
+    const record = await waterRepository.findOne({
+        where: {
+            id,
+            cat: { id: cat.id }
+        }
+    });
 
-    const query = waterRepository
-        .createQueryBuilder("water");
-
-    // Date range filtering.
-    if (startDate) {
-        query.andWhere(
-            "water.recordDate >= :startDate",
-            { startDate }
-        );
+    if (!record) {
+        return false;
     }
 
-    if (endDate) {
-        query.andWhere(
-            "water.recordDate <= :endDate",
-            { endDate }
-        );
-    }
+    // Deleting a consumption record does NOT delete
+    // or modify the daily offered water target.
+    await waterRepository.remove(record);
 
-    // Filter measured or unmeasured records.
-    if (measured !== undefined) {
-        query.andWhere(
-            "water.measured = :measured",
-            { measured: measured ? 1 : 0 }
-        );
-    }
+    return true;
+};
 
-    // Allow only approved sorting columns.
-    const sortColumns = {
+// --------------------------------------------------
+// ADVANCED filtering, sorting and pagination
+// --------------------------------------------------
+
+export const getAdvancedWaterRecords = async (
+    options: WaterQueryOptions = {}
+) => {
+    const cat = await getDefaultCat();
+
+    const page = Math.max(1, Math.floor(options.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Math.floor(options.limit ?? 10)));
+
+    const allowedSortFields = {
         recordDate: "water.recordDate",
-        offeredMl: "water.offeredMl",
         consumedMl: "water.consumedMl",
         createdAt: "water.createdAt"
     };
 
-    query
-        .orderBy(sortColumns[sortBy], order)
-        .addOrderBy("water.id", "ASC");
-
-    // Pagination.
-    query.skip((page - 1) * limit);
-    query.take(limit);
-
-    const [records, totalRecords] =
-        await query.getManyAndCount();
-
-    return {
-
-        data: records.map(formatWater),
-
-        pagination: {
-            totalRecords,
-            currentPage: page,
-            totalPages: Math.ceil(totalRecords / limit),
-            limit
-        }
-    };
-};
-
-
-// GROUP WATER RECORDS BY MEASUREMENT STATUS
-export const getWaterGroupedByMeasurement = async (
-    startDate?: string,
-    endDate?: string
-): Promise<{
-    measured: boolean;
-    totalRecords: number;
-    totalOfferedMl: number;
-    totalConsumedMl: number;
-}[]> => {
+    const sortBy = options.sortBy ?? "createdAt";
+    const order = options.order === "ASC" ? "ASC" : "DESC";
 
     const query = waterRepository
         .createQueryBuilder("water")
-        .select("water.measured", "measured")
-        .addSelect("COUNT(*)", "totalRecords")
-        .addSelect(
-            "COALESCE(SUM(water.offeredMl), 0)",
-            "totalOfferedMl"
-        )
-        .addSelect(
-            "COALESCE(SUM(water.consumedMl), 0)",
-            "totalConsumedMl"
-        )
-        .groupBy("water.measured")
-        .orderBy("water.measured", "DESC");
+        .innerJoin("water.cat", "cat")
+        .where("cat.id = :catId", { catId: cat.id });
+
+    if (options.startDate) {
+        query.andWhere("water.recordDate >= :startDate", {
+            startDate: options.startDate
+        });
+    }
+
+    if (options.endDate) {
+        query.andWhere("water.recordDate <= :endDate", {
+            endDate: options.endDate
+        });
+    }
+
+    if (options.measured !== undefined) {
+        query.andWhere("water.measured = :measured", {
+            measured: options.measured ? 1 : 0
+        });
+    }
+
+    if (options.minConsumedMl !== undefined) {
+        query.andWhere("water.consumedMl >= :minConsumedMl", {
+            minConsumedMl: options.minConsumedMl
+        });
+    }
+
+    if (options.maxConsumedMl !== undefined) {
+        query.andWhere("water.consumedMl <= :maxConsumedMl", {
+            maxConsumedMl: options.maxConsumedMl
+        });
+    }
+
+    const total = await query.getCount();
+
+    const records = await query
+        .orderBy(allowedSortFields[sortBy], order)
+        .addOrderBy("water.id", "DESC")
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getMany();
+
+    return {
+        records: records.map(formatWater),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+    };
+};
+
+// --------------------------------------------------
+// GROUP water records by measured status
+// --------------------------------------------------
+
+export const getWaterGrouped = async (
+    startDate?: string,
+    endDate?: string
+) => {
+    const cat = await getDefaultCat();
+
+    const query = waterRepository
+        .createQueryBuilder("water")
+        .innerJoin("water.cat", "cat")
+        .where("cat.id = :catId", { catId: cat.id });
 
     if (startDate) {
-        query.andWhere(
-            "water.recordDate >= :startDate",
-            { startDate }
-        );
+        query.andWhere("water.recordDate >= :startDate", {
+            startDate
+        });
     }
 
     if (endDate) {
-        query.andWhere(
-            "water.recordDate <= :endDate",
-            { endDate }
-        );
+        query.andWhere("water.recordDate <= :endDate", {
+            endDate
+        });
     }
 
-    const results = await query.getRawMany<{
-        measured: number;
-        totalRecords: string | number;
-        totalOfferedMl: string | number;
-        totalConsumedMl: string | number;
-    }>();
+    const results = await query
+        .select("water.measured", "measured")
+        .addSelect("COUNT(water.id)", "totalRecords")
+        .addSelect(
+            `COALESCE(
+                SUM(
+                    CASE
+                        WHEN water.measured = 1
+                        THEN COALESCE(water.consumedMl, 0)
+                        ELSE 0
+                    END
+                ),
+                0
+            )`,
+            "totalConsumedMl"
+        )
+        .groupBy("water.measured")
+        .orderBy("water.measured", "DESC")
+        .getRawMany();
 
-    return results.map((row) => ({
-
-        measured: Boolean(row.measured),
-
+    return results.map(row => ({
+        measured: Number(row.measured) === 1,
         totalRecords: Number(row.totalRecords),
-
-        totalOfferedMl: Number(row.totalOfferedMl),
-
         totalConsumedMl: Number(row.totalConsumedMl)
     }));
 };

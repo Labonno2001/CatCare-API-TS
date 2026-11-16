@@ -1,6 +1,8 @@
 
 import { AppDataSource } from "../database/data-source";
+
 import { FeedingRecord as FeedingRecordEntity } from "../entities/FeedingRecord";
+import { CatProfileEntity } from "../entities/CatProfile";
 
 import {
     FeedingRecord,
@@ -11,6 +13,11 @@ import {
 const feedingRepository =
     AppDataSource.getRepository(FeedingRecordEntity);
 
+const catRepository =
+    AppDataSource.getRepository(CatProfileEntity);
+
+
+// Query options for filtering, sorting and pagination.
 export interface FeedingQueryOptions {
     startDate?: string;
     endDate?: string;
@@ -22,7 +29,11 @@ export interface FeedingQueryOptions {
     limit?: number;
 }
 
-const formatFeeding = (row: FeedingRecordEntity): FeedingRecord => ({
+
+// Convert TypeORM entity into API response format.
+const formatFeeding = (
+    row: FeedingRecordEntity
+): FeedingRecord => ({
     id: row.id,
     foodName: row.foodName,
     quantityGrams: row.quantityGrams,
@@ -32,10 +43,29 @@ const formatFeeding = (row: FeedingRecordEntity): FeedingRecord => ({
     createdAt: row.createdAt
 });
 
-// GET all feeding records.
+
+// Find the default cat.
+const getDefaultCat = async (): Promise<CatProfileEntity> => {
+
+    const cat = await catRepository.findOneBy({
+        id: 1
+    });
+
+    if (!cat) {
+        throw new Error(
+            "Default cat profile (Mini, ID 1) not found."
+        );
+    }
+
+    return cat;
+};
+
+
+// GET ALL FEEDING RECORDS
 export const getAllFeedingRecords = async (
     date?: string
 ): Promise<FeedingRecord[]> => {
+
     const rows = await feedingRepository.find({
         where: date ? { recordDate: date } : {},
         order: date
@@ -46,10 +76,12 @@ export const getAllFeedingRecords = async (
     return rows.map(formatFeeding);
 };
 
-// Advanced filtering, date range, sorting and pagination.
+
+// ADVANCED FILTERING, SORTING AND PAGINATION
 export const getFeedingRecordsAdvanced = async (
     options: FeedingQueryOptions
 ) => {
+
     const {
         startDate,
         endDate,
@@ -64,53 +96,52 @@ export const getFeedingRecordsAdvanced = async (
     const query = feedingRepository
         .createQueryBuilder("feeding");
 
-    // Filter by starting date.
     if (startDate) {
-        query.andWhere("feeding.recordDate >= :startDate", {
-            startDate
-        });
+        query.andWhere(
+            "feeding.recordDate >= :startDate",
+            { startDate }
+        );
     }
 
-    // Filter by ending date.
     if (endDate) {
-        query.andWhere("feeding.recordDate <= :endDate", {
-            endDate
-        });
+        query.andWhere(
+            "feeding.recordDate <= :endDate",
+            { endDate }
+        );
     }
 
-    // Search by food name.
     if (foodName) {
-        query.andWhere("LOWER(feeding.foodName) LIKE LOWER(:foodName)", {
-            foodName: `%${foodName}%`
-        });
+        query.andWhere(
+            "LOWER(feeding.foodName) LIKE LOWER(:foodName)",
+            { foodName: `%${foodName}%` }
+        );
     }
 
-    // Filter by meal time.
     if (mealTime) {
-        query.andWhere("feeding.mealTime = :mealTime", {
-            mealTime
-        });
+        query.andWhere(
+            "feeding.mealTime = :mealTime",
+            { mealTime }
+        );
     }
 
-    // Allowed sorting fields.
     const allowedSortFields = {
         recordDate: "feeding.recordDate",
         quantityGrams: "feeding.quantityGrams",
         foodName: "feeding.foodName"
     };
 
-    // Sorting and pagination.
     query
         .orderBy(allowedSortFields[sortBy], order)
         .addOrderBy("feeding.id", "ASC")
         .skip((page - 1) * limit)
         .take(limit);
 
-    const [records, total] = await query.getManyAndCount();
+    const [records, total] =
+        await query.getManyAndCount();
 
-    // Standardized response structure.
     return {
         data: records.map(formatFeeding),
+
         pagination: {
             totalRecords: total,
             currentPage: page,
@@ -120,29 +151,36 @@ export const getFeedingRecordsAdvanced = async (
     };
 };
 
-// Group feeding records by food name.
+
+// GROUP FEEDING RECORDS BY FOOD NAME
 export const getFeedingGroupedByFood = async (
     startDate?: string,
     endDate?: string
 ) => {
+
     const query = feedingRepository
         .createQueryBuilder("feeding")
         .select("feeding.foodName", "foodName")
         .addSelect("COUNT(*)", "totalRecords")
-        .addSelect("SUM(feeding.quantityGrams)", "totalGrams")
+        .addSelect(
+            "SUM(feeding.quantityGrams)",
+            "totalGrams"
+        )
         .groupBy("feeding.foodName")
         .orderBy("totalGrams", "DESC");
 
     if (startDate) {
-        query.andWhere("feeding.recordDate >= :startDate", {
-            startDate
-        });
+        query.andWhere(
+            "feeding.recordDate >= :startDate",
+            { startDate }
+        );
     }
 
     if (endDate) {
-        query.andWhere("feeding.recordDate <= :endDate", {
-            endDate
-        });
+        query.andWhere(
+            "feeding.recordDate <= :endDate",
+            { endDate }
+        );
     }
 
     const rows = await query.getRawMany();
@@ -154,24 +192,47 @@ export const getFeedingGroupedByFood = async (
     }));
 };
 
-// POST a feeding record.
+
+// CREATE FEEDING RECORD
 export const createFeedingRecord = async (
     input: CreateFeedingInput
 ): Promise<FeedingRecord> => {
+
+    // Find Mini before creating the record.
+    const cat = await getDefaultCat();
+
+    // Create a new feeding record.
     const newRecord = feedingRepository.create({
+
         foodName: input.foodName.trim(),
+
         quantityGrams: input.quantityGrams,
+
         mealTime: input.mealTime,
+
         notes: input.notes ?? "",
+
         createdAt: new Date().toISOString(),
-        recordDate: input.recordDate
+
+        recordDate: input.recordDate,
+
+        // Assign the required cat relationship.
+        cat: cat
     });
 
-    return formatFeeding(await feedingRepository.save(newRecord));
+    // Save the record in SQLite.
+    const savedRecord =
+        await feedingRepository.save(newRecord);
+
+    return formatFeeding(savedRecord);
 };
 
-// GET feeding summary.
-export const getFeedingSummary = async (date?: string) => {
+
+// GET FEEDING SUMMARY
+export const getFeedingSummary = async (
+    date?: string
+) => {
+
     const query = feedingRepository
         .createQueryBuilder("feeding")
         .select("COUNT(*)", "totalRecords")
@@ -181,63 +242,94 @@ export const getFeedingSummary = async (date?: string) => {
         );
 
     if (date) {
-        query.where("feeding.recordDate = :date", { date });
+        query.where(
+            "feeding.recordDate = :date",
+            { date }
+        );
     }
 
     const summary = await query.getRawOne();
 
     return {
-        totalRecords: Number(summary?.totalRecords ?? 0),
-        totalGrams: Number(summary?.totalGrams ?? 0)
+        totalRecords: Number(
+            summary?.totalRecords ?? 0
+        ),
+
+        totalGrams: Number(
+            summary?.totalGrams ?? 0
+        )
     };
 };
 
-// GET one feeding record by ID.
+
+// GET ONE FEEDING RECORD BY ID
 export const getFeedingRecordById = async (
     id: number
 ): Promise<FeedingRecord | null> => {
-    const row = await feedingRepository.findOneBy({ id });
+
+    const row = await feedingRepository.findOneBy({
+        id
+    });
 
     return row ? formatFeeding(row) : null;
 };
 
-// PUT: Replace the complete feeding record.
+
+// FULL UPDATE USING PUT
 export const updateFeedingRecord = async (
     id: number,
     input: CreateFeedingInput
 ): Promise<FeedingRecord | null> => {
+
     const result = await feedingRepository.update(id, {
+
         foodName: input.foodName.trim(),
+
         quantityGrams: input.quantityGrams,
+
         mealTime: input.mealTime,
+
         notes: input.notes ?? "",
+
         recordDate: input.recordDate
     });
 
-    if (!result.affected) return null;
+    if (!result.affected) {
+        return null;
+    }
 
-    const updated = await feedingRepository.findOneBy({ id });
+    const updated = await feedingRepository.findOneBy({
+        id
+    });
 
     return updated ? formatFeeding(updated) : null;
 };
 
-// DELETE a feeding record.
+
+// DELETE FEEDING RECORD
 export const deleteFeedingRecord = async (
     id: number
 ): Promise<boolean> => {
+
     const result = await feedingRepository.delete(id);
 
     return (result.affected ?? 0) > 0;
 };
 
-// PATCH: Update selected feeding fields.
+
+// PARTIAL UPDATE USING PATCH
 export const patchFeedingRecord = async (
     id: number,
     input: PatchFeedingInput
 ): Promise<FeedingRecord | null> => {
-    const record = await feedingRepository.findOneBy({ id });
 
-    if (!record) return null;
+    const record = await feedingRepository.findOneBy({
+        id
+    });
+
+    if (!record) {
+        return null;
+    }
 
     if (input.foodName !== undefined) {
         record.foodName = input.foodName.trim();
@@ -259,5 +351,8 @@ export const patchFeedingRecord = async (
         record.recordDate = input.recordDate;
     }
 
-    return formatFeeding(await feedingRepository.save(record));
+    const savedRecord =
+        await feedingRepository.save(record);
+
+    return formatFeeding(savedRecord);
 };

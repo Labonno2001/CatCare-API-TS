@@ -1,6 +1,8 @@
 
 import { AppDataSource } from "../database/data-source";
+
 import { WaterRecord as WaterRecordEntity } from "../entities/WaterRecord";
+import { CatProfileEntity } from "../entities/CatProfile";
 
 import {
     WaterRecord,
@@ -8,11 +10,15 @@ import {
     PatchWaterInput
 } from "../types/water.types";
 
+
 const waterRepository =
     AppDataSource.getRepository(WaterRecordEntity);
 
+const catRepository =
+    AppDataSource.getRepository(CatProfileEntity);
 
-// Advanced query options
+
+// Query options for filtering, sorting and pagination.
 export interface WaterQueryOptions {
     startDate?: string;
     endDate?: string;
@@ -24,10 +30,11 @@ export interface WaterQueryOptions {
 }
 
 
-// Convert a TypeORM entity into the API response format.
+// Convert TypeORM entity into API response format.
 const formatWater = (
     row: WaterRecordEntity
 ): WaterRecord => {
+
     return {
         id: row.id,
         offeredMl: row.offeredMl,
@@ -40,13 +47,34 @@ const formatWater = (
 };
 
 
-// Get all water records, optionally filtered by date.
+// Find the default cat.
+const getDefaultCat = async (): Promise<CatProfileEntity> => {
+
+    const cat = await catRepository.findOneBy({
+        id: 1
+    });
+
+    if (!cat) {
+        throw new Error(
+            "Default cat profile (Mini, ID 1) not found."
+        );
+    }
+
+    return cat;
+};
+
+
+// GET ALL WATER RECORDS
 export const getAllWaterRecords = async (
     date?: string
 ): Promise<WaterRecord[]> => {
 
     const rows = await waterRepository.find({
-        where: date ? { recordDate: date } : {},
+
+        where: date
+            ? { recordDate: date }
+            : {},
+
         order: date
             ? { id: "ASC" }
             : { recordDate: "DESC", id: "ASC" }
@@ -56,29 +84,44 @@ export const getAllWaterRecords = async (
 };
 
 
-// Create a water record.
+// CREATE WATER RECORD
 export const createWaterRecord = async (
     input: CreateWaterInput
 ): Promise<WaterRecord> => {
 
+    // Find Mini before creating the record.
+    const cat = await getDefaultCat();
+
+    // Create a new water record.
     const newRecord = waterRepository.create({
+
         offeredMl: input.offeredMl,
+
         consumedMl: input.measured
             ? input.consumedMl ?? null
             : null,
+
         measured: input.measured ? 1 : 0,
+
         notes: input.notes ?? "",
+
         createdAt: new Date().toISOString(),
-        recordDate: input.recordDate
+
+        recordDate: input.recordDate,
+
+        // Assign the required cat relationship.
+        cat: cat
     });
 
-    const savedRecord = await waterRepository.save(newRecord);
+    // Save the record in SQLite.
+    const savedRecord =
+        await waterRepository.save(newRecord);
 
     return formatWater(savedRecord);
 };
 
 
-// Get water summary, optionally filtered by date.
+// GET WATER SUMMARY
 export const getWaterSummary = async (
     date?: string
 ): Promise<{
@@ -105,7 +148,10 @@ export const getWaterSummary = async (
         );
 
     if (date) {
-        query.where("water.recordDate = :date", { date });
+        query.where(
+            "water.recordDate = :date",
+            { date }
+        );
     }
 
     const summary = await query.getRawOne<{
@@ -116,20 +162,34 @@ export const getWaterSummary = async (
     }>();
 
     return {
-        totalRecords: Number(summary?.totalRecords ?? 0),
-        totalOfferedMl: Number(summary?.totalOfferedMl ?? 0),
-        measuredConsumptionRecords: Number(summary?.measuredConsumptionRecords ?? 0),
-        totalMeasuredConsumedMl: Number(summary?.totalMeasuredConsumedMl ?? 0)
+
+        totalRecords: Number(
+            summary?.totalRecords ?? 0
+        ),
+
+        totalOfferedMl: Number(
+            summary?.totalOfferedMl ?? 0
+        ),
+
+        measuredConsumptionRecords: Number(
+            summary?.measuredConsumptionRecords ?? 0
+        ),
+
+        totalMeasuredConsumedMl: Number(
+            summary?.totalMeasuredConsumedMl ?? 0
+        )
     };
 };
 
 
-// Get one water record by ID.
+// GET ONE WATER RECORD BY ID
 export const getWaterRecordById = async (
     id: number
 ): Promise<WaterRecord | null> => {
 
-    const row = await waterRepository.findOneBy({ id });
+    const row = await waterRepository.findOneBy({
+        id
+    });
 
     if (!row) {
         return null;
@@ -139,19 +199,24 @@ export const getWaterRecordById = async (
 };
 
 
-// Full update using TypeORM update().
+// FULL UPDATE USING PUT
 export const updateWaterRecord = async (
     id: number,
     input: CreateWaterInput
 ): Promise<WaterRecord | null> => {
 
     const result = await waterRepository.update(id, {
+
         offeredMl: input.offeredMl,
+
         consumedMl: input.measured
             ? input.consumedMl ?? null
             : null,
+
         measured: input.measured ? 1 : 0,
+
         notes: input.notes ?? "",
+
         recordDate: input.recordDate
     });
 
@@ -159,13 +224,16 @@ export const updateWaterRecord = async (
         return null;
     }
 
-    const updatedRecord = await waterRepository.findOneBy({ id });
+    const updatedRecord =
+        await waterRepository.findOneBy({ id });
 
-    return updatedRecord ? formatWater(updatedRecord) : null;
+    return updatedRecord
+        ? formatWater(updatedRecord)
+        : null;
 };
 
 
-// Delete using TypeORM delete().
+// DELETE WATER RECORD
 export const deleteWaterRecord = async (
     id: number
 ): Promise<boolean> => {
@@ -176,13 +244,15 @@ export const deleteWaterRecord = async (
 };
 
 
-// Partial update using findOneBy() and save().
+// PARTIAL UPDATE USING PATCH
 export const patchWaterRecord = async (
     id: number,
     input: PatchWaterInput
 ): Promise<WaterRecord | null> => {
 
-    const record = await waterRepository.findOneBy({ id });
+    const record = await waterRepository.findOneBy({
+        id
+    });
 
     if (!record) {
         return null;
@@ -197,6 +267,7 @@ export const patchWaterRecord = async (
     }
 
     if (input.measured !== undefined) {
+
         record.measured = input.measured ? 1 : 0;
 
         if (input.measured === false) {
@@ -212,14 +283,14 @@ export const patchWaterRecord = async (
         record.recordDate = input.recordDate;
     }
 
-    const updatedRecord = await waterRepository.save(record);
+    const updatedRecord =
+        await waterRepository.save(record);
 
     return formatWater(updatedRecord);
 };
 
 
-// ADVANCED QUERY BUILDER
-// Filter, sort and paginate water records.
+// ADVANCED FILTERING, SORTING AND PAGINATION
 export const getWaterRecordsAdvanced = async (
     options: WaterQueryOptions
 ): Promise<{
@@ -245,7 +316,7 @@ export const getWaterRecordsAdvanced = async (
     const query = waterRepository
         .createQueryBuilder("water");
 
-    // Date range filtering
+    // Date range filtering.
     if (startDate) {
         query.andWhere(
             "water.recordDate >= :startDate",
@@ -260,7 +331,7 @@ export const getWaterRecordsAdvanced = async (
         );
     }
 
-    // Filter measured or unmeasured records
+    // Filter measured or unmeasured records.
     if (measured !== undefined) {
         query.andWhere(
             "water.measured = :measured",
@@ -268,7 +339,7 @@ export const getWaterRecordsAdvanced = async (
         );
     }
 
-    // Allow only approved sorting columns
+    // Allow only approved sorting columns.
     const sortColumns = {
         recordDate: "water.recordDate",
         offeredMl: "water.offeredMl",
@@ -276,10 +347,11 @@ export const getWaterRecordsAdvanced = async (
         createdAt: "water.createdAt"
     };
 
-    query.orderBy(sortColumns[sortBy], order);
-    query.addOrderBy("water.id", "ASC");
+    query
+        .orderBy(sortColumns[sortBy], order)
+        .addOrderBy("water.id", "ASC");
 
-    // Pagination
+    // Pagination.
     query.skip((page - 1) * limit);
     query.take(limit);
 
@@ -287,7 +359,9 @@ export const getWaterRecordsAdvanced = async (
         await query.getManyAndCount();
 
     return {
+
         data: records.map(formatWater),
+
         pagination: {
             totalRecords,
             currentPage: page,
@@ -298,7 +372,7 @@ export const getWaterRecordsAdvanced = async (
 };
 
 
-// GROUP BY measured status
+// GROUP WATER RECORDS BY MEASUREMENT STATUS
 export const getWaterGroupedByMeasurement = async (
     startDate?: string,
     endDate?: string
@@ -346,9 +420,13 @@ export const getWaterGroupedByMeasurement = async (
     }>();
 
     return results.map((row) => ({
+
         measured: Boolean(row.measured),
+
         totalRecords: Number(row.totalRecords),
+
         totalOfferedMl: Number(row.totalOfferedMl),
+
         totalConsumedMl: Number(row.totalConsumedMl)
     }));
 };

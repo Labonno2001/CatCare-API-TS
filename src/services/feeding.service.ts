@@ -32,6 +32,7 @@ const formatFeeding = (row: FeedingRecordEntity): FeedingRecord => ({
     createdAt: row.createdAt
 });
 
+// GET all feeding records.
 export const getAllFeedingRecords = async (
     date?: string
 ): Promise<FeedingRecord[]> => {
@@ -63,36 +64,42 @@ export const getFeedingRecordsAdvanced = async (
     const query = feedingRepository
         .createQueryBuilder("feeding");
 
+    // Filter by starting date.
     if (startDate) {
         query.andWhere("feeding.recordDate >= :startDate", {
             startDate
         });
     }
 
+    // Filter by ending date.
     if (endDate) {
         query.andWhere("feeding.recordDate <= :endDate", {
             endDate
         });
     }
 
+    // Search by food name.
     if (foodName) {
         query.andWhere("LOWER(feeding.foodName) LIKE LOWER(:foodName)", {
             foodName: `%${foodName}%`
         });
     }
 
+    // Filter by meal time.
     if (mealTime) {
         query.andWhere("feeding.mealTime = :mealTime", {
             mealTime
         });
     }
 
+    // Allowed sorting fields.
     const allowedSortFields = {
         recordDate: "feeding.recordDate",
         quantityGrams: "feeding.quantityGrams",
         foodName: "feeding.foodName"
     };
 
+    // Sorting and pagination.
     query
         .orderBy(allowedSortFields[sortBy], order)
         .addOrderBy("feeding.id", "ASC")
@@ -101,13 +108,14 @@ export const getFeedingRecordsAdvanced = async (
 
     const [records, total] = await query.getManyAndCount();
 
+    // Standardized response structure.
     return {
-        records: records.map(formatFeeding),
+        data: records.map(formatFeeding),
         pagination: {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit)
+            totalRecords: total,
+            currentPage: page,
+            totalPages: Math.ceil(total / limit),
+            limit
         }
     };
 };
@@ -146,6 +154,7 @@ export const getFeedingGroupedByFood = async (
     }));
 };
 
+// POST a feeding record.
 export const createFeedingRecord = async (
     input: CreateFeedingInput
 ): Promise<FeedingRecord> => {
@@ -161,6 +170,7 @@ export const createFeedingRecord = async (
     return formatFeeding(await feedingRepository.save(newRecord));
 };
 
+// GET feeding summary.
 export const getFeedingSummary = async (date?: string) => {
     const query = feedingRepository
         .createQueryBuilder("feeding")
@@ -182,13 +192,16 @@ export const getFeedingSummary = async (date?: string) => {
     };
 };
 
+// GET one feeding record by ID.
 export const getFeedingRecordById = async (
     id: number
 ): Promise<FeedingRecord | null> => {
     const row = await feedingRepository.findOneBy({ id });
+
     return row ? formatFeeding(row) : null;
 };
 
+// PUT: Replace the complete feeding record.
 export const updateFeedingRecord = async (
     id: number,
     input: CreateFeedingInput
@@ -204,28 +217,47 @@ export const updateFeedingRecord = async (
     if (!result.affected) return null;
 
     const updated = await feedingRepository.findOneBy({ id });
+
     return updated ? formatFeeding(updated) : null;
 };
 
+// DELETE a feeding record.
 export const deleteFeedingRecord = async (
     id: number
 ): Promise<boolean> => {
     const result = await feedingRepository.delete(id);
+
     return (result.affected ?? 0) > 0;
 };
 
+// PATCH: Update selected feeding fields.
 export const patchFeedingRecord = async (
     id: number,
     input: PatchFeedingInput
 ): Promise<FeedingRecord | null> => {
     const record = await feedingRepository.findOneBy({ id });
+
     if (!record) return null;
 
-    if (input.foodName !== undefined) record.foodName = input.foodName.trim();
-    if (input.quantityGrams !== undefined) record.quantityGrams = input.quantityGrams;
-    if (input.mealTime !== undefined) record.mealTime = input.mealTime;
-    if (input.notes !== undefined) record.notes = input.notes;
-    if (input.recordDate !== undefined) record.recordDate = input.recordDate;
+    if (input.foodName !== undefined) {
+        record.foodName = input.foodName.trim();
+    }
+
+    if (input.quantityGrams !== undefined) {
+        record.quantityGrams = input.quantityGrams;
+    }
+
+    if (input.mealTime !== undefined) {
+        record.mealTime = input.mealTime;
+    }
+
+    if (input.notes !== undefined) {
+        record.notes = input.notes;
+    }
+
+    if (input.recordDate !== undefined) {
+        record.recordDate = input.recordDate;
+    }
 
     return formatFeeding(await feedingRepository.save(record));
 };

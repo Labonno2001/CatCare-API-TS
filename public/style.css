@@ -1,4 +1,3 @@
-
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
 
 /* ==========================================
@@ -73,8 +72,6 @@ p {
     overflow-y: auto;
 }
 
-/* Logo container */
-
 .logo {
     width: 100%;
     height: auto;
@@ -87,8 +84,6 @@ p {
     padding: 5px 8px 35px;
 }
 
-/* Logo icon */
-
 .logo span {
     width: 45px;
     height: 45px;
@@ -100,8 +95,6 @@ p {
     font-size: 25px;
 }
 
-/* Logo title */
-
 .logo h2 {
     color: var(--dark-green);
     font-size: 21px;
@@ -109,8 +102,6 @@ p {
     line-height: 1.2;
     white-space: nowrap;
 }
-
-/* Navigation */
 
 .sidebar nav {
     display: flex;
@@ -159,8 +150,6 @@ p {
     min-height: 100vh;
     min-width: 0;
 }
-
-/* Top header */
 
 .topbar {
     min-height: 85px;
@@ -600,7 +589,6 @@ form button {
 ========================================== */
 
 @media (max-width: 1000px) {
-
     .sidebar {
         width: 220px;
     }
@@ -633,7 +621,6 @@ form button {
 ========================================== */
 
 @media (max-width: 700px) {
-
     body {
         display: block;
     }
@@ -771,7 +758,6 @@ form button {
 ========================================== */
 
 @media (max-width: 380px) {
-
     .stats-grid {
         grid-template-columns: 1fr;
     }
@@ -783,5 +769,78 @@ form button {
     .nav-link {
         font-size: 10px;
         padding: 9px;
+    }
+}
+
+
+/* ==========================================
+   17. DAILY WATER TARGET
+========================================== */
+
+.daily-target-card {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 22px;
+    flex-wrap: wrap;
+    background: #f8fbf6;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0 24px;
+}
+
+.daily-target-card h3 {
+    color: var(--dark-green);
+    font-size: 15px;
+    margin-bottom: 7px;
+}
+
+.daily-target-card p {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.6;
+    max-width: 520px;
+}
+
+.daily-target-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    min-width: min(100%, 390px);
+}
+
+.daily-target-controls .form-group {
+    flex: 1;
+    min-width: 150px;
+    margin-bottom: 0;
+}
+
+.daily-target-controls button {
+    white-space: nowrap;
+    min-height: 40px;
+}
+
+.target-date-label {
+    flex-basis: 100%;
+    margin-top: -10px;
+}
+
+@media (max-width: 700px) {
+    .daily-target-card {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .daily-target-controls {
+        width: 100%;
+        min-width: 0;
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .daily-target-controls button {
+        width: 100%;
     }
 }

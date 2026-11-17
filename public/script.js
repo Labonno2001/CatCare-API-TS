@@ -1,15 +1,16 @@
-
 /* ==========================================
    CATCARE HUB
    Frontend: HTML + CSS + JavaScript
    Backend: TypeScript + Express API
 ========================================== */
 
-const API_URL = "";
+const API_URL = "http://localhost:3000";
 
 let catProfile = null;
 let feedingRecords = [];
 let waterRecords = [];
+let dailyWaterTarget = null;
+let dailyTargetDate = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,7 +19,6 @@ const $ = (id) => document.getElementById(id);
 // 1. DATE HELPERS
 // ==========================================
 
-// Get today's date using the computer's local timezone.
 function getLocalDate() {
     const now = new Date();
 
@@ -116,25 +116,11 @@ function showPage(pageName) {
             pageName.charAt(0).toUpperCase() + pageName.slice(1);
     }
 
-    if (pageName === "dashboard") {
-        updateDashboard();
-    }
-
-    if (pageName === "profile") {
-        loadCat();
-    }
-
-    if (pageName === "feeding") {
-        renderFeeding();
-    }
-
-    if (pageName === "water") {
-        renderWater();
-    }
-
-    if (pageName === "wellness") {
-        loadWellness();
-    }
+    if (pageName === "dashboard") updateDashboard();
+    if (pageName === "profile") loadCat();
+    if (pageName === "feeding") renderFeeding();
+    if (pageName === "water") renderWater();
+    if (pageName === "wellness") loadWellness();
 }
 
 document.querySelectorAll(".nav-link").forEach(link => {
@@ -144,7 +130,6 @@ document.querySelectorAll(".nav-link").forEach(link => {
     });
 });
 
-// Also support buttons with data-page.
 document.querySelectorAll("[data-page]").forEach(button => {
     button.addEventListener("click", () => {
         showPage(button.dataset.page);
@@ -207,7 +192,6 @@ function displayCatProfile() {
 }
 
 
-// Update cat profile.
 if ($("profile-form")) {
     $("profile-form").addEventListener("submit", async event => {
         event.preventDefault();
@@ -254,8 +238,6 @@ if ($("profile-form")) {
 // 6. FEEDING TRACKER
 // ==========================================
 
-// Load all feeding records.
-// Date filtering is performed in the browser.
 async function loadFeeding() {
     try {
         const result = await apiRequest("/api/feeding");
@@ -274,7 +256,6 @@ async function loadFeeding() {
 }
 
 
-// Get feeding records for the selected filter date.
 function getFilteredFeeding() {
     const selectedDate = $("feeding-date-filter")?.value;
 
@@ -288,7 +269,6 @@ function getFilteredFeeding() {
 }
 
 
-// Display feeding table.
 function renderFeeding() {
     const table = $("feeding-table");
 
@@ -354,7 +334,6 @@ function renderFeeding() {
 }
 
 
-// Add feeding record.
 if ($("feeding-form")) {
     $("feeding-form").addEventListener("submit", async event => {
         event.preventDefault();
@@ -401,7 +380,6 @@ if ($("feeding-form")) {
 }
 
 
-// Edit feeding record, including its date.
 async function editFeeding(id) {
     const record = feedingRecords.find(item => item.id === id);
 
@@ -477,7 +455,6 @@ async function editFeeding(id) {
 }
 
 
-// Delete feeding record.
 async function deleteFeeding(id) {
     if (!confirm("Are you sure you want to delete this feeding record?")) {
         return;
@@ -498,7 +475,6 @@ async function deleteFeeding(id) {
 }
 
 
-// Feeding date filter.
 if ($("feeding-date-filter")) {
     $("feeding-date-filter").addEventListener("change", renderFeeding);
 }
@@ -515,14 +491,15 @@ if ($("feeding-clear-filter")) {
 // 7. WATER TRACKER
 // ==========================================
 
+// Load all water intake records.
 async function loadWater() {
     try {
         const result = await apiRequest("/api/water");
 
         waterRecords = result.records || result.data || [];
 
-        renderWater();
-        updateDashboard();
+        await renderWater();
+        await updateDashboard();
 
         return waterRecords;
 
@@ -533,7 +510,7 @@ async function loadWater() {
 }
 
 
-// Filter water records by selected date.
+// Filter records by selected date.
 function getFilteredWater() {
     const selectedDate = $("water-date-filter")?.value;
 
@@ -547,131 +524,219 @@ function getFilteredWater() {
 }
 
 
-// Display water table and totals.
-function renderWater() {
+// Get the fixed daily offered-water target.
+async function loadDailyWaterTarget(date) {
+    const result = await apiRequest(
+        `/api/water/daily-target?date=${encodeURIComponent(date)}`
+    );
+
+    dailyWaterTarget =
+        result.target ??
+        result.data?.target ??
+        result.data ??
+        null;
+
+    dailyTargetDate = date;
+
+    return dailyWaterTarget;
+}
+
+
+// Display water records and daily totals.
+async function renderWater() {
     const table = $("water-table");
 
     if (!table) return;
 
-    table.innerHTML = "";
+    const selectedDate =
+        $("water-date-filter")?.value || getLocalDate();
 
     const records = getFilteredWater();
+
+    try {
+        const target = await loadDailyWaterTarget(selectedDate);
+
+        const offeredMl = Number(target?.offeredMl ?? 0);
+
+        if ($("daily-offered-input")) {
+            $("daily-offered-input").value =
+                target?.offeredMl ?? "";
+        }
+
+        if ($("daily-target-date-label")) {
+            $("daily-target-date-label").textContent =
+                `Daily target date: ${formatDate(selectedDate)}`;
+        }
+
+        if ($("water-total-offered")) {
+            $("water-total-offered").textContent = `${offeredMl} ml`;
+        }
+
+        const consumed = records
+            .filter(record => record.recordDate === selectedDate)
+            .reduce(
+                (sum, record) => sum + Number(record.consumedMl || 0),
+                0
+            );
+
+        if ($("water-total-consumed")) {
+            $("water-total-consumed").textContent = `${consumed} ml`;
+        }
+
+        if ($("water-remaining")) {
+            $("water-remaining").textContent =
+                `${offeredMl - consumed} ml`;
+        }
+
+    } catch (error) {
+        dailyWaterTarget = null;
+        dailyTargetDate = selectedDate;
+
+        if ($("daily-offered-input")) {
+            $("daily-offered-input").value = "";
+        }
+
+        if ($("water-total-offered")) {
+            $("water-total-offered").textContent = "Unavailable";
+        }
+
+        if ($("daily-target-date-label")) {
+            $("daily-target-date-label").textContent =
+                `Could not load target for ${formatDate(selectedDate)}: ${error.message}`;
+        }
+
+        showMessage(
+            `Could not load daily water target: ${error.message}`,
+            "error"
+        );
+    }
+
+    table.innerHTML = "";
 
     if (records.length === 0) {
         table.innerHTML = `
             <tr>
-                <td colspan="7">No water records found.</td>
+                <td colspan="5">No water records found.</td>
             </tr>
         `;
-    } else {
-        const sortedRecords = [...records].sort((a, b) =>
-            (b.recordDate || "").localeCompare(a.recordDate || "") ||
-            b.id - a.id
-        );
+        return;
+    }
 
-        sortedRecords.forEach(record => {
-            const row = document.createElement("tr");
+    const sortedRecords = [...records].sort((a, b) =>
+        (b.recordDate || "").localeCompare(a.recordDate || "") ||
+        b.id - a.id
+    );
 
-            const values = [
-                record.id,
-                `${record.offeredMl} ml`,
-                record.measured
-                    ? `${record.consumedMl} ml`
-                    : "Not measured",
-                record.measured ? "Yes" : "No",
-                formatDate(record.recordDate),
-                record.notes || ""
-            ];
+    sortedRecords.forEach(record => {
+        const row = document.createElement("tr");
 
-            values.forEach(value => {
-                const cell = document.createElement("td");
-                cell.textContent = String(value ?? "");
-                row.appendChild(cell);
-            });
+        const values = [
+            record.id,
+            `${Number(record.consumedMl ?? 0)} ml`,
+            formatDate(record.recordDate),
+            record.notes || ""
+        ];
 
-            const actions = document.createElement("td");
-
-            const editButton = document.createElement("button");
-            editButton.textContent = "Edit";
-            editButton.type = "button";
-            editButton.addEventListener("click", () => {
-                editWater(record.id);
-            });
-
-            const deleteButton = document.createElement("button");
-            deleteButton.textContent = "Delete";
-            deleteButton.type = "button";
-            deleteButton.addEventListener("click", () => {
-                deleteWater(record.id);
-            });
-
-            actions.append(editButton, deleteButton);
-            row.appendChild(actions);
-
-            table.appendChild(row);
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = String(value ?? "");
+            row.appendChild(cell);
         });
-    }
 
-    // Calculate totals using only currently filtered records.
-    const totalOffered = records.reduce(
-        (sum, record) => sum + Number(record.offeredMl || 0),
-        0
-    );
+        const actions = document.createElement("td");
 
-    const totalConsumed = records.reduce(
-        (sum, record) =>
-            sum + (
-                record.measured
-                    ? Number(record.consumedMl || 0)
-                    : 0
-            ),
-        0
-    );
+        const editButton = document.createElement("button");
+        editButton.textContent = "Edit";
+        editButton.type = "button";
+        editButton.addEventListener("click", () => {
+            editWater(record.id);
+        });
 
-    if ($("water-total-offered")) {
-        $("water-total-offered").textContent =
-            `${totalOffered} ml`;
-    }
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "Delete";
+        deleteButton.type = "button";
+        deleteButton.addEventListener("click", () => {
+            deleteWater(record.id);
+        });
 
-    if ($("water-total-consumed")) {
-        $("water-total-consumed").textContent =
-            `${totalConsumed} ml`;
-    }
+        actions.append(editButton, deleteButton);
+        row.appendChild(actions);
+
+        table.appendChild(row);
+    });
 }
 
 
-// Add water record.
+// Save or update one daily target for the selected date.
+if ($("save-daily-target-btn")) {
+    $("save-daily-target-btn").addEventListener("click", async () => {
+        const date =
+            $("water-date-filter")?.value || getLocalDate();
+
+        const inputValue = $("daily-offered-input")?.value;
+
+        const offeredMl = Number(inputValue);
+
+        if (
+            inputValue === "" ||
+            !Number.isFinite(offeredMl) ||
+            offeredMl < 0
+        ) {
+            showMessage(
+                "Enter a valid offered-water amount (0 or more).",
+                "error"
+            );
+            return;
+        }
+
+        try {
+            await apiRequest("/api/water/daily-target", {
+                method: "PUT",
+                body: JSON.stringify({
+                    recordDate: date,
+                    offeredMl
+                })
+            });
+
+            await renderWater();
+            await updateDashboard();
+
+            showMessage(
+                `Daily water target saved for ${formatDate(date)}.`
+            );
+
+        } catch (error) {
+            showMessage(error.message, "error");
+        }
+    });
+}
+
+
+// Add an intake record.
+// Offered water is intentionally NOT sent in this request.
 if ($("water-form")) {
     $("water-form").addEventListener("submit", async event => {
         event.preventDefault();
 
         const form = event.currentTarget;
 
-        const measured = form.elements.measured.value === "true";
-
         const input = {
             recordDate: form.elements.recordDate.value,
-            offeredMl: Number(form.elements.offeredMl.value),
-            measured,
-            consumedMl: measured
-                ? Number(form.elements.consumedMl.value)
-                : null,
+            measured: true,
+            consumedMl: Number(form.elements.consumedMl.value),
             notes: form.elements.notes.value.trim()
         };
 
         if (
             !input.recordDate ||
-            !Number.isFinite(input.offeredMl) ||
-            input.offeredMl < 0 ||
-            (
-                measured &&
-                (
-                    !Number.isFinite(input.consumedMl) ||
-                    input.consumedMl < 0
-                )
-            )
+            form.elements.consumedMl.value === "" ||
+            !Number.isFinite(input.consumedMl) ||
+            input.consumedMl < 0
         ) {
-            showMessage("Please enter valid water information.", "error");
+            showMessage(
+                "Enter a valid water consumption amount (0 or more).",
+                "error"
+            );
             return;
         }
 
@@ -682,12 +747,13 @@ if ($("water-form")) {
             });
 
             form.reset();
-
             closeModal("water-modal");
 
             await loadWater();
 
-            showMessage("Water record saved successfully!");
+            showMessage(
+                "Water intake record saved. Daily offered water was not changed."
+            );
 
         } catch (error) {
             showMessage(error.message, "error");
@@ -696,7 +762,7 @@ if ($("water-form")) {
 }
 
 
-// Edit water record, including its date.
+// Edit an intake record only.
 async function editWater(id) {
     const record = waterRecords.find(item => item.id === id);
 
@@ -709,29 +775,14 @@ async function editWater(id) {
 
     if (recordDate === null) return;
 
-    const offered = prompt(
-        "Water offered (ml):",
-        record.offeredMl
+    const consumedValue = prompt(
+        "Water consumed (ml):",
+        record.consumedMl ?? ""
     );
 
-    if (offered === null) return;
+    if (consumedValue === null) return;
 
-    const measured = confirm(
-        "Do you have a measured consumption value?"
-    );
-
-    let consumed = null;
-
-    if (measured) {
-        consumed = prompt(
-            "Water consumed (ml):",
-            record.consumedMl ?? ""
-        );
-
-        if (consumed === null) return;
-
-        consumed = Number(consumed);
-    }
+    const consumedMl = Number(consumedValue);
 
     const notes = prompt(
         "Notes:",
@@ -740,36 +791,32 @@ async function editWater(id) {
 
     if (notes === null) return;
 
-    const input = {
-        recordDate: recordDate.trim(),
-        offeredMl: Number(offered),
-        measured,
-        consumedMl: measured ? consumed : null,
-        notes: notes.trim()
-    };
-
     if (
-        !input.recordDate ||
-        !Number.isFinite(input.offeredMl) ||
-        input.offeredMl < 0 ||
-        (
-            measured &&
-            (!Number.isFinite(consumed) || consumed < 0)
-        )
+        !recordDate.trim() ||
+        consumedValue.trim() === "" ||
+        !Number.isFinite(consumedMl) ||
+        consumedMl < 0
     ) {
-        showMessage("Invalid water information.", "error");
+        showMessage("Invalid water intake information.", "error");
         return;
     }
 
     try {
         await apiRequest(`/api/water/${id}`, {
             method: "PATCH",
-            body: JSON.stringify(input)
+            body: JSON.stringify({
+                recordDate: recordDate.trim(),
+                measured: true,
+                consumedMl,
+                notes: notes.trim()
+            })
         });
 
         await loadWater();
 
-        showMessage("Water record updated successfully!");
+        showMessage(
+            "Water intake record updated. Daily target was not changed."
+        );
 
     } catch (error) {
         showMessage(error.message, "error");
@@ -777,9 +824,9 @@ async function editWater(id) {
 }
 
 
-// Delete water record.
+// Delete an intake record only.
 async function deleteWater(id) {
-    if (!confirm("Are you sure you want to delete this water record?")) {
+    if (!confirm("Are you sure you want to delete this water intake record?")) {
         return;
     }
 
@@ -790,7 +837,9 @@ async function deleteWater(id) {
 
         await loadWater();
 
-        showMessage("Water record deleted!");
+        showMessage(
+            "Water intake record deleted. Daily target was not changed."
+        );
 
     } catch (error) {
         showMessage(error.message, "error");
@@ -798,15 +847,15 @@ async function deleteWater(id) {
 }
 
 
-// Water date filter.
+// Changing the date reloads the target for that date.
 if ($("water-date-filter")) {
     $("water-date-filter").addEventListener("change", renderWater);
 }
 
 if ($("water-clear-filter")) {
-    $("water-clear-filter").addEventListener("click", () => {
+    $("water-clear-filter").addEventListener("click", async () => {
         $("water-date-filter").value = "";
-        renderWater();
+        await renderWater();
     });
 }
 
@@ -815,7 +864,7 @@ if ($("water-clear-filter")) {
 // 8. DASHBOARD
 // ==========================================
 
-function updateDashboard() {
+async function updateDashboard() {
     const selectedDate =
         $("dashboard-date-filter")?.value || getLocalDate();
 
@@ -828,34 +877,43 @@ function updateDashboard() {
     );
 
     const foodTotal = selectedFeeding.reduce(
-        (sum, record) =>
-            sum + Number(record.quantityGrams || 0),
-        0
-    );
-
-    const waterOffered = selectedWater.reduce(
-        (sum, record) =>
-            sum + Number(record.offeredMl || 0),
+        (sum, record) => sum + Number(record.quantityGrams || 0),
         0
     );
 
     const waterConsumed = selectedWater.reduce(
-        (sum, record) =>
-            sum + (
-                record.measured
-                    ? Number(record.consumedMl || 0)
-                    : 0
-            ),
+        (sum, record) => sum + Number(record.consumedMl || 0),
         0
     );
+
+    let waterOffered = 0;
+
+    try {
+        const targetResult = await apiRequest(
+            `/api/water/daily-target?date=${encodeURIComponent(selectedDate)}`
+        );
+
+        const target =
+            targetResult.target ??
+            targetResult.data?.target ??
+            targetResult.data ??
+            null;
+
+        waterOffered = Number(target?.offeredMl ?? 0);
+
+    } catch (error) {
+        console.error(
+            "Could not load dashboard daily water target:",
+            error
+        );
+    }
 
     if ($("stat-food")) {
         $("stat-food").textContent = `${foodTotal} g`;
     }
 
     if ($("stat-feeding-count")) {
-        $("stat-feeding-count").textContent =
-            selectedFeeding.length;
+        $("stat-feeding-count").textContent = selectedFeeding.length;
     }
 
     if ($("stat-water")) {
@@ -863,8 +921,7 @@ function updateDashboard() {
     }
 
     if ($("stat-water-count")) {
-        $("stat-water-count").textContent =
-            selectedWater.length;
+        $("stat-water-count").textContent = selectedWater.length;
     }
 
     if ($("stat-consumed")) {
@@ -885,7 +942,6 @@ function updateDashboard() {
 }
 
 
-// Show the five most recent feeding records for selected date.
 function renderRecentFeeding(records) {
     const container = $("recent-feeding");
 
@@ -927,7 +983,6 @@ function renderRecentFeeding(records) {
 }
 
 
-// Dashboard date selection.
 if ($("dashboard-date-filter")) {
     $("dashboard-date-filter").addEventListener(
         "change",
@@ -1023,7 +1078,6 @@ function openModal(id) {
 
     modal.style.display = "flex";
 
-    // Set the form date when opening a new record form.
     if (id === "feeding-modal" && $("feeding-record-date")) {
         $("feeding-record-date").value =
             $("dashboard-date-filter")?.value || getLocalDate();
@@ -1031,7 +1085,7 @@ function openModal(id) {
 
     if (id === "water-modal" && $("water-record-date")) {
         $("water-record-date").value =
-            $("dashboard-date-filter")?.value || getLocalDate();
+            $("water-date-filter")?.value || getLocalDate();
     }
 }
 
@@ -1045,7 +1099,6 @@ function closeModal(id) {
 }
 
 
-// Open modal buttons.
 document.querySelectorAll("[data-open-modal]").forEach(button => {
     button.addEventListener("click", () => {
         openModal(button.dataset.openModal);
@@ -1053,7 +1106,6 @@ document.querySelectorAll("[data-open-modal]").forEach(button => {
 });
 
 
-// Close modal buttons.
 document.querySelectorAll("[data-close-modal]").forEach(button => {
     button.addEventListener("click", () => {
         closeModal(button.dataset.closeModal);
@@ -1079,7 +1131,7 @@ async function refreshApp() {
             loadWater()
         ]);
 
-        updateDashboard();
+        await updateDashboard();
 
         if (status) {
             status.textContent = "Connected";
@@ -1121,6 +1173,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if ($("water-record-date")) {
         $("water-record-date").value = today;
+    }
+
+    if ($("water-date-filter")) {
+        $("water-date-filter").value = today;
     }
 
     await refreshApp();

@@ -4,7 +4,7 @@
    Backend: TypeScript + Express API
 ========================================== */
 
-const API_URL = "http://localhost:3000";
+const API_URL = "";
 
 let catProfile = null;
 let feedingRecords = [];

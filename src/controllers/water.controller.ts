@@ -22,126 +22,6 @@ import {
     CreateWaterDailyTargetInput
 } from "../types/water.types";
 
-import {
-    isValidDate,
-    isValidId
-} from "../utils/validation";
-
-// --------------------------------------------------
-// Validation helpers
-// --------------------------------------------------
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value);
-
-const isValidNonNegativeNumber = (value: unknown): boolean =>
-    (typeof value === "number" ||
-        (typeof value === "string" && value.trim() !== "")) &&
-    Number.isFinite(Number(value)) &&
-    Number(value) >= 0;
-
-const isPositiveInteger = (value: unknown): boolean =>
-    typeof value === "string" &&
-    /^\d+$/.test(value) &&
-    Number.isSafeInteger(Number(value)) &&
-    Number(value) > 0;
-
-// --------------------------------------------------
-// Validate complete water consumption record
-// --------------------------------------------------
-
-const isValidWaterInput = (
-    body: unknown
-): body is Record<string, unknown> => {
-    if (!isObject(body)) {
-        return false;
-    }
-
-    const validConsumption =
-        body.measured === true
-            ? isValidNonNegativeNumber(body.consumedMl)
-            : body.consumedMl === undefined ||
-              body.consumedMl === null;
-
-    return (
-        typeof body.measured === "boolean" &&
-        validConsumption &&
-        (body.notes === undefined || typeof body.notes === "string") &&
-        typeof body.recordDate === "string" &&
-        isValidDate(body.recordDate)
-    );
-};
-
-// --------------------------------------------------
-// Validate partial water record update
-// --------------------------------------------------
-
-const isValidWaterPatch = (
-    body: unknown
-): body is Record<string, unknown> => {
-    if (!isObject(body)) {
-        return false;
-    }
-
-    const keys = Object.keys(body);
-
-    const allowedFields = [
-        "consumedMl",
-        "measured",
-        "notes",
-        "recordDate"
-    ];
-
-    if (
-        keys.length === 0 ||
-        keys.some(key => !allowedFields.includes(key))
-    ) {
-        return false;
-    }
-
-    if (
-        body.consumedMl !== undefined &&
-        body.consumedMl !== null &&
-        !isValidNonNegativeNumber(body.consumedMl)
-    ) {
-        return false;
-    }
-
-    if (
-        body.measured !== undefined &&
-        typeof body.measured !== "boolean"
-    ) {
-        return false;
-    }
-
-    if (
-        body.notes !== undefined &&
-        typeof body.notes !== "string"
-    ) {
-        return false;
-    }
-
-    if (
-        body.recordDate !== undefined &&
-        (typeof body.recordDate !== "string" ||
-            !isValidDate(body.recordDate))
-    ) {
-        return false;
-    }
-
-    if (
-        body.measured === false &&
-        body.consumedMl !== undefined &&
-        body.consumedMl !== null
-    ) {
-        return false;
-    }
-
-    return true;
-};
-
 // --------------------------------------------------
 // GET all water records
 // --------------------------------------------------
@@ -150,22 +30,12 @@ export const getAllWaterRecordsController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    const date = req.query.date;
 
-    if (
-        date !== undefined &&
-        (typeof date !== "string" || !isValidDate(date))
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid date. Use YYYY-MM-DD."
-        });
-        return;
-    }
+    const date = req.query.date as string | undefined;
 
     const allRecords = await getAllWaterRecords();
 
-    const records = typeof date === "string"
+    const records = date
         ? allRecords.filter(record => record.recordDate === date)
         : allRecords;
 
@@ -184,21 +54,14 @@ export const createWaterRecordController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    if (!isValidWaterInput(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "Please provide valid water consumption details."
-        });
-        return;
-    }
 
     const body = req.body;
 
     const input: CreateWaterInput = {
-        consumedMl: body.measured ? Number(body.consumedMl) : null,
-        measured: body.measured as boolean,
-        notes: (body.notes as string | undefined) ?? "",
-        recordDate: body.recordDate as string
+        consumedMl: body.measured ? body.consumedMl : null,
+        measured: body.measured,
+        notes: body.notes ?? "",
+        recordDate: body.recordDate
     };
 
     const record = await createWaterRecord(input);
@@ -219,18 +82,8 @@ export const getWaterDailyTargetController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    const date = req.query.date;
 
-    if (
-        typeof date !== "string" ||
-        !isValidDate(date)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "A valid date is required. Use YYYY-MM-DD."
-        });
-        return;
-    }
+    const date = req.query.date as string;
 
     const target = await getWaterDailyTarget(date);
 
@@ -249,30 +102,11 @@ export const saveWaterDailyTargetController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    if (!isObject(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid request body."
-        });
-        return;
-    }
 
     const { offeredMl, recordDate } = req.body;
 
-    if (
-        !isValidNonNegativeNumber(offeredMl) ||
-        typeof recordDate !== "string" ||
-        !isValidDate(recordDate)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Provide a valid offeredMl and recordDate."
-        });
-        return;
-    }
-
     const input: CreateWaterDailyTargetInput = {
-        offeredMl: Number(offeredMl),
+        offeredMl,
         recordDate
     };
 
@@ -293,16 +127,8 @@ export const getWaterSummaryController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    const date = req.query.date;
 
-    // A daily summary must always have a specific date.
-    if (typeof date !== "string" || !isValidDate(date)) {
-        res.status(400).json({
-            success: false,
-            message: "A valid date is required. Use YYYY-MM-DD."
-        });
-        return;
-    }
+    const date = req.query.date as string;
 
     const summary = await getWaterSummary(date);
 
@@ -320,13 +146,6 @@ export const getWaterRecordByIdController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid water record ID."
-        });
-        return;
-    }
 
     const record = await getWaterRecordById(Number(req.params.id));
 
@@ -352,29 +171,14 @@ export const updateWaterRecordController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid water record ID."
-        });
-        return;
-    }
-
-    if (!isValidWaterInput(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "PUT requires valid water consumption fields."
-        });
-        return;
-    }
 
     const body = req.body;
 
     const input: CreateWaterInput = {
-        consumedMl: body.measured ? Number(body.consumedMl) : null,
-        measured: body.measured as boolean,
-        notes: (body.notes as string | undefined) ?? "",
-        recordDate: body.recordDate as string
+        consumedMl: body.measured ? body.consumedMl : null,
+        measured: body.measured,
+        notes: body.notes ?? "",
+        recordDate: body.recordDate
     };
 
     const record = await updateWaterRecord(
@@ -405,21 +209,6 @@ export const patchWaterRecordController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid water record ID."
-        });
-        return;
-    }
-
-    if (!isValidWaterPatch(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "Provide at least one valid field to update."
-        });
-        return;
-    }
 
     const existingRecord = await getWaterRecordById(
         Number(req.params.id)
@@ -437,24 +226,22 @@ export const patchWaterRecordController = async (
     const input: PatchWaterInput = {};
 
     if (body.consumedMl !== undefined) {
-        input.consumedMl =
-            body.consumedMl === null
-                ? null
-                : Number(body.consumedMl);
+        input.consumedMl = body.consumedMl;
     }
 
     if (body.measured !== undefined) {
-        input.measured = body.measured as boolean;
+        input.measured = body.measured;
     }
 
     if (body.notes !== undefined) {
-        input.notes = body.notes as string;
+        input.notes = body.notes;
     }
 
     if (body.recordDate !== undefined) {
-        input.recordDate = body.recordDate as string;
+        input.recordDate = body.recordDate;
     }
 
+    // Preserve the existing business rules.
     const resultingMeasured =
         input.measured ?? existingRecord.measured;
 
@@ -513,13 +300,6 @@ export const deleteWaterRecordController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid water record ID."
-        });
-        return;
-    }
 
     const deleted = await deleteWaterRecord(Number(req.params.id));
 
@@ -545,6 +325,7 @@ export const getAdvancedWaterRecordsController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
+
     const {
         startDate,
         endDate,
@@ -555,168 +336,29 @@ export const getAdvancedWaterRecordsController = async (
         order,
         page,
         limit
-    } = req.query;
+    } = req.query as Record<string, string | undefined>;
 
-    const queryValues = [
+    // Convert query string into the required boolean value.
+    const measuredValue: boolean | undefined =
+        measured === undefined
+            ? undefined
+            : measured === "true";
+
+    // Convert query strings into numbers.
+    const minConsumedValue =
+        minConsumedMl === undefined
+            ? undefined
+            : Number(minConsumedMl);
+
+    const maxConsumedValue =
+        maxConsumedMl === undefined
+            ? undefined
+            : Number(maxConsumedMl);
+
+    // Prepare options for the service.
+    const options: WaterQueryOptions = {
         startDate,
         endDate,
-        measured,
-        minConsumedMl,
-        maxConsumedMl,
-        sortBy,
-        order,
-        page,
-        limit
-    ];
-
-    if (queryValues.some(
-        value => value !== undefined && typeof value !== "string"
-    )) {
-        res.status(400).json({
-            success: false,
-            message: "Each query parameter must have one value."
-        });
-        return;
-    }
-
-    if (
-        startDate !== undefined &&
-        !isValidDate(startDate)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid startDate. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    if (
-        endDate !== undefined &&
-        !isValidDate(endDate)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid endDate. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    if (
-        typeof startDate === "string" &&
-        typeof endDate === "string" &&
-        startDate > endDate
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "startDate cannot be later than endDate."
-        });
-        return;
-    }
-
-    let measuredValue: boolean | undefined;
-
-    if (measured !== undefined) {
-        if (measured !== "true" && measured !== "false") {
-            res.status(400).json({
-                success: false,
-                message: "measured must be true or false."
-            });
-            return;
-        }
-
-        measuredValue = measured === "true";
-    }
-
-    let minConsumedValue: number | undefined;
-    let maxConsumedValue: number | undefined;
-
-    if (minConsumedMl !== undefined) {
-        if (!isValidNonNegativeNumber(minConsumedMl)) {
-            res.status(400).json({
-                success: false,
-                message: "minConsumedMl must be a non-negative number."
-            });
-            return;
-        }
-
-        minConsumedValue = Number(minConsumedMl);
-    }
-
-    if (maxConsumedMl !== undefined) {
-        if (!isValidNonNegativeNumber(maxConsumedMl)) {
-            res.status(400).json({
-                success: false,
-                message: "maxConsumedMl must be a non-negative number."
-            });
-            return;
-        }
-
-        maxConsumedValue = Number(maxConsumedMl);
-    }
-
-    if (
-        minConsumedValue !== undefined &&
-        maxConsumedValue !== undefined &&
-        minConsumedValue > maxConsumedValue
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "minConsumedMl cannot be greater than maxConsumedMl."
-        });
-        return;
-    }
-
-    const allowedSortFields = [
-        "recordDate",
-        "consumedMl",
-        "createdAt"
-    ];
-
-    if (
-        sortBy !== undefined &&
-        !allowedSortFields.includes(sortBy as string)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid sortBy field."
-        });
-        return;
-    }
-
-    if (
-        order !== undefined &&
-        order !== "ASC" &&
-        order !== "DESC"
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "order must be ASC or DESC."
-        });
-        return;
-    }
-
-    if (page !== undefined && !isPositiveInteger(page)) {
-        res.status(400).json({
-            success: false,
-            message: "page must be a positive integer."
-        });
-        return;
-    }
-
-    if (
-        limit !== undefined &&
-        (!isPositiveInteger(limit) || Number(limit) > 100)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "limit must be between 1 and 100."
-        });
-        return;
-    }
-
-    const options: WaterQueryOptions = {
-        startDate: startDate as string | undefined,
-        endDate: endDate as string | undefined,
         measured: measuredValue,
         minConsumedMl: minConsumedValue,
         maxConsumedMl: maxConsumedValue,
@@ -742,36 +384,15 @@ export const getWaterGroupedController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-    const { startDate, endDate } = req.query;
 
-    if (
-        (startDate !== undefined &&
-            (typeof startDate !== "string" || !isValidDate(startDate))) ||
-        (endDate !== undefined &&
-            (typeof endDate !== "string" || !isValidDate(endDate)))
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid date. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    if (
-        typeof startDate === "string" &&
-        typeof endDate === "string" &&
-        startDate > endDate
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "startDate cannot be later than endDate."
-        });
-        return;
-    }
+    const { startDate, endDate } = req.query as Record<
+        string,
+        string | undefined
+    >;
 
     const groups = await getWaterGrouped(
-        startDate as string | undefined,
-        endDate as string | undefined
+        startDate,
+        endDate
     );
 
     res.status(200).json({

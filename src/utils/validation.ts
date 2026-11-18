@@ -19,21 +19,3 @@ export const isValidDate = (
         parsed.toISOString().slice(0, 10) === date
     );
 };
-
-
-// Validate a positive integer record ID
-export const isValidId = (
-    id: string | string[]
-): boolean => {
-
-    if (typeof id !== "string" || id.trim() === "") {
-        return false;
-    }
-
-    const numericId = Number(id);
-
-    return (
-        Number.isInteger(numericId) &&
-        numericId > 0
-    );
-};

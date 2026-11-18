@@ -15,140 +15,7 @@ import {
 
 import { PatchFeedingInput } from "../types/feeding.types";
 
-import {
-    isValidDate,
-    isValidId
-} from "../utils/validation";
-
-
-interface FeedingInputBody {
-    foodName: string;
-    quantityGrams: number | string;
-    mealTime: string;
-    notes?: string;
-    recordDate: string;
-}
-
-
-// Validate complete feeding record.
-const isValidFeedingInput = (
-    body: unknown
-): body is FeedingInputBody => {
-
-    if (
-        typeof body !== "object" ||
-        body === null ||
-        Array.isArray(body)
-    ) {
-        return false;
-    }
-
-    const input = body as Record<string, unknown>;
-
-    const validQuantity =
-        (typeof input.quantityGrams === "number" ||
-            (typeof input.quantityGrams === "string" &&
-                input.quantityGrams.trim() !== "")) &&
-        Number.isFinite(Number(input.quantityGrams)) &&
-        Number(input.quantityGrams) > 0;
-
-    return (
-        typeof input.foodName === "string" &&
-        input.foodName.trim().length > 0 &&
-        validQuantity &&
-        typeof input.mealTime === "string" &&
-        input.mealTime.trim().length > 0 &&
-        (input.notes === undefined ||
-            typeof input.notes === "string") &&
-        isValidDate(input.recordDate)
-    );
-};
-
-
-// Validate partial feeding update.
-const isValidFeedingPatch = (
-    body: unknown
-): body is Record<string, unknown> => {
-
-    if (
-        typeof body !== "object" ||
-        body === null ||
-        Array.isArray(body)
-    ) {
-        return false;
-    }
-
-    const input = body as Record<string, unknown>;
-    const keys = Object.keys(input);
-
-    const allowedFields = [
-        "foodName",
-        "quantityGrams",
-        "mealTime",
-        "notes",
-        "recordDate"
-    ];
-
-    if (
-        keys.length === 0 ||
-        keys.some(key => !allowedFields.includes(key))
-    ) {
-        return false;
-    }
-
-    if (
-        input.foodName !== undefined &&
-        (
-            typeof input.foodName !== "string" ||
-            input.foodName.trim().length === 0
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.quantityGrams !== undefined &&
-        (
-            !(
-                typeof input.quantityGrams === "number" ||
-                (
-                    typeof input.quantityGrams === "string" &&
-                    input.quantityGrams.trim() !== ""
-                )
-            ) ||
-            !Number.isFinite(Number(input.quantityGrams)) ||
-            Number(input.quantityGrams) <= 0
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.mealTime !== undefined &&
-        (
-            typeof input.mealTime !== "string" ||
-            input.mealTime.trim().length === 0
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.notes !== undefined &&
-        typeof input.notes !== "string"
-    ) {
-        return false;
-    }
-
-    if (
-        input.recordDate !== undefined &&
-        !isValidDate(input.recordDate)
-    ) {
-        return false;
-    }
-
-    return true;
-};
+import { isValidDate } from "../utils/validation";
 
 
 // Validate positive integer query parameters.
@@ -170,10 +37,13 @@ export const getAllFeedingRecordsController = async (
 
     const date = req.query.date;
 
-    if (date !== undefined && (
-        typeof date !== "string" ||
-        !isValidDate(date)
-    )) {
+    if (
+        date !== undefined &&
+        (
+            typeof date !== "string" ||
+            !isValidDate(date)
+        )
+    ) {
         res.status(400).json({
             success: false,
             message: "Invalid date. Use YYYY-MM-DD."
@@ -359,14 +229,7 @@ export const createFeedingRecordController = async (
     res: Response
 ): Promise<void> => {
 
-    if (!isValidFeedingInput(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "Please enter valid feeding details, including a valid record date."
-        });
-        return;
-    }
-
+    // Request body has already been validated by Zod middleware.
     const {
         foodName,
         quantityGrams,
@@ -399,10 +262,13 @@ export const getFeedingSummaryController = async (
 
     const date = req.query.date;
 
-    if (date !== undefined && (
-        typeof date !== "string" ||
-        !isValidDate(date)
-    )) {
+    if (
+        date !== undefined &&
+        (
+            typeof date !== "string" ||
+            !isValidDate(date)
+        )
+    ) {
         res.status(400).json({
             success: false,
             message: "Invalid date. Use YYYY-MM-DD."
@@ -426,14 +292,6 @@ export const getFeedingRecordByIdController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid feeding record ID."
-        });
-        return;
-    }
 
     const record = await getFeedingRecordById(
         Number(req.params.id)
@@ -460,22 +318,7 @@ export const updateFeedingRecordController = async (
     res: Response
 ): Promise<void> => {
 
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid feeding record ID."
-        });
-        return;
-    }
-
-    if (!isValidFeedingInput(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "PUT requires all valid feeding fields."
-        });
-        return;
-    }
-
+    // Request body has already been validated by Zod middleware.
     const {
         foodName,
         quantityGrams,
@@ -517,22 +360,7 @@ export const patchFeedingRecordController = async (
     res: Response
 ): Promise<void> => {
 
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid feeding record ID."
-        });
-        return;
-    }
-
-    if (!isValidFeedingPatch(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "Please provide at least one valid feeding field to update."
-        });
-        return;
-    }
-
+    // Request body has already been validated by Zod middleware.
     const body = req.body as Record<string, unknown>;
     const input: PatchFeedingInput = {};
 
@@ -568,14 +396,6 @@ export const deleteFeedingRecordController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-
-    if (!isValidId(req.params.id)) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid feeding record ID."
-        });
-        return;
-    }
 
     const deleted = await deleteFeedingRecord(
         Number(req.params.id)

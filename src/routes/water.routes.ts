@@ -15,21 +15,48 @@ import {
     saveWaterDailyTargetController
 } from "../controllers/water.controller";
 
+// Zod validation middleware
+import {
+    validateBody,
+    validateParams,
+    validateQuery
+} from "../middleware/validate.middleware";
+
+// Water body validation schemas
+import {
+    waterCreateSchema,
+    waterUpdateSchema,
+    waterPatchSchema,
+    waterDailyTargetSchema
+} from "../validators/water.validator";
+
+// Water query validation schemas
+import {
+    waterDateQuerySchema,
+    waterDailyTargetQuerySchema,
+    waterSummaryQuerySchema,
+    waterAdvancedQuerySchema,
+    waterGroupedQuerySchema
+} from "../validators/water-query.validator";
+
+// URL parameter validation schema
+import { idParamSchema } from "../validators/params.validator";
+
 const router = Router();
 
 // --------------------------------------------------
 // Daily offered water target
 // --------------------------------------------------
 
-// GET /api/water/daily-target?date=2026-11-16
 router.get(
     "/daily-target",
+    validateQuery(waterDailyTargetQuerySchema),
     getWaterDailyTargetController
 );
 
-// PUT /api/water/daily-target
 router.put(
     "/daily-target",
+    validateBody(waterDailyTargetSchema),
     saveWaterDailyTargetController
 );
 
@@ -37,9 +64,9 @@ router.put(
 // Summary
 // --------------------------------------------------
 
-// GET /api/water/summary?date=2026-11-16
 router.get(
     "/summary",
+    validateQuery(waterSummaryQuerySchema),
     getWaterSummaryController
 );
 
@@ -47,9 +74,9 @@ router.get(
 // Advanced filtering, sorting and pagination
 // --------------------------------------------------
 
-// GET /api/water/advanced
 router.get(
     "/advanced",
+    validateQuery(waterAdvancedQuerySchema),
     getAdvancedWaterRecordsController
 );
 
@@ -57,9 +84,9 @@ router.get(
 // Group water records
 // --------------------------------------------------
 
-// GET /api/water/grouped
 router.get(
     "/grouped",
+    validateQuery(waterGroupedQuerySchema),
     getWaterGroupedController
 );
 
@@ -67,39 +94,41 @@ router.get(
 // Individual water consumption records
 // --------------------------------------------------
 
-// GET /api/water
 router.get(
     "/",
+    validateQuery(waterDateQuerySchema),
     getAllWaterRecordsController
 );
 
-// POST /api/water
 router.post(
     "/",
+    validateBody(waterCreateSchema),
     createWaterRecordController
 );
 
-// GET /api/water/:id
 router.get(
     "/:id",
+    validateParams(idParamSchema),
     getWaterRecordByIdController
 );
 
-// PUT /api/water/:id
 router.put(
     "/:id",
+    validateParams(idParamSchema),
+    validateBody(waterUpdateSchema),
     updateWaterRecordController
 );
 
-// PATCH /api/water/:id
 router.patch(
     "/:id",
+    validateParams(idParamSchema),
+    validateBody(waterPatchSchema),
     patchWaterRecordController
 );
 
-// DELETE /api/water/:id
 router.delete(
     "/:id",
+    validateParams(idParamSchema),
     deleteWaterRecordController
 );
 

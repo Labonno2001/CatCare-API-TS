@@ -1,0 +1,77 @@
+
+import { z } from "zod";
+import { isValidDate } from "../utils/validation";
+
+// Reusable date validation
+const dateSchema = z.string().refine(
+    isValidDate,
+    "Date must be a valid YYYY-MM-DD date."
+);
+
+// Reusable positive integer query validation
+const positiveIntegerSchema = z.string()
+    .regex(/^[1-9]\d*$/, "Must be a positive integer.")
+    .refine(
+        value => Number.isSafeInteger(Number(value)),
+        "Number is outside the supported integer range."
+    );
+
+// GET /api/feeding?date=
+export const feedingDateQuerySchema = z.object({
+    date: dateSchema.optional()
+});
+
+// GET /api/feeding/summary?date=
+export const feedingSummaryQuerySchema = z.object({
+    date: dateSchema.optional()
+});
+
+// GET /api/feeding/grouped?startDate=&endDate=
+export const feedingGroupedQuerySchema = z.object({
+    startDate: dateSchema.optional(),
+    endDate: dateSchema.optional()
+}).refine(
+    data =>
+        !data.startDate ||
+        !data.endDate ||
+        data.startDate <= data.endDate,
+    {
+        message: "startDate cannot be later than endDate.",
+        path: ["endDate"]
+    }
+);
+
+// GET /api/feeding/advanced
+export const feedingAdvancedQuerySchema = z.object({
+    startDate: dateSchema.optional(),
+
+    endDate: dateSchema.optional(),
+
+    foodName: z.string().trim().min(1).optional(),
+
+    mealTime: z.string().trim().min(1).optional(),
+
+    sortBy: z.enum([
+        "recordDate",
+        "quantityGrams",
+        "foodName"
+    ]).optional(),
+
+    order: z.enum([
+        "ASC",
+        "DESC"
+    ]).optional(),
+
+    page: positiveIntegerSchema.optional(),
+
+    limit: positiveIntegerSchema.optional()
+}).refine(
+    data =>
+        !data.startDate ||
+        !data.endDate ||
+        data.startDate <= data.endDate,
+    {
+        message: "startDate cannot be later than endDate.",
+        path: ["endDate"]
+    }
+);

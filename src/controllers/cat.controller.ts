@@ -3,98 +3,8 @@ import { Request, Response } from "express";
 
 import {
     getCatProfile,
-    updateCatProfile,
-    UpdateCatProfileInput
+    updateCatProfile
 } from "../services/cat.service";
-
-
-// Validate partial cat profile updates
-const isValidCatProfileInput = (
-    body: unknown
-): body is UpdateCatProfileInput => {
-
-    if (
-        typeof body !== "object" ||
-        body === null ||
-        Array.isArray(body)
-    ) {
-        return false;
-    }
-
-    const input = body as Record<string, unknown>;
-
-    const allowedFields = [
-        "name",
-        "age",
-        "weightKg",
-        "favoriteFood",
-        "activity"
-    ];
-
-    const keys = Object.keys(input);
-
-    if (
-        keys.length === 0 ||
-        keys.some(key => !allowedFields.includes(key))
-    ) {
-        return false;
-    }
-
-    if (
-        input.name !== undefined &&
-        (
-            typeof input.name !== "string" ||
-            !input.name.trim()
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.age !== undefined &&
-        (
-            typeof input.age !== "number" ||
-            !Number.isFinite(input.age) ||
-            input.age < 0
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.weightKg !== undefined &&
-        (
-            typeof input.weightKg !== "number" ||
-            !Number.isFinite(input.weightKg) ||
-            input.weightKg <= 0
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.favoriteFood !== undefined &&
-        (
-            typeof input.favoriteFood !== "string" ||
-            !input.favoriteFood.trim()
-        )
-    ) {
-        return false;
-    }
-
-    if (
-        input.activity !== undefined &&
-        (
-            typeof input.activity !== "string" ||
-            !input.activity.trim()
-        )
-    ) {
-        return false;
-    }
-
-    return true;
-};
-
 
 // GET cat profile
 export const getCatProfileController = async (
@@ -125,14 +35,6 @@ export const updateCatProfileController = async (
     req: Request,
     res: Response
 ): Promise<void> => {
-
-    if (!isValidCatProfileInput(req.body)) {
-        res.status(400).json({
-            success: false,
-            message: "Please enter valid cat profile details."
-        });
-        return;
-    }
 
     const cat = await updateCatProfile(req.body);
 

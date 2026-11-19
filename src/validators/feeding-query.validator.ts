@@ -47,9 +47,17 @@ export const feedingAdvancedQuerySchema = z.object({
 
     endDate: dateSchema.optional(),
 
-    foodName: z.string().trim().min(1).optional(),
+    foodName: z.string()
+        .trim()
+        .min(1, "Food name cannot be empty.")
+        .max(100, "Food name cannot exceed 100 characters.")
+        .optional(),
 
-    mealTime: z.string().trim().min(1).optional(),
+    mealTime: z.string()
+        .trim()
+        .min(1, "Meal time cannot be empty.")
+        .max(50, "Meal time cannot exceed 50 characters.")
+        .optional(),
 
     sortBy: z.enum([
         "recordDate",
@@ -64,7 +72,12 @@ export const feedingAdvancedQuerySchema = z.object({
 
     page: positiveIntegerSchema.optional(),
 
-    limit: positiveIntegerSchema.optional()
+    limit: positiveIntegerSchema
+        .refine(
+            value => Number(value) <= 100,
+            "Limit cannot exceed 100."
+        )
+        .optional()
 }).refine(
     data =>
         !data.startDate ||

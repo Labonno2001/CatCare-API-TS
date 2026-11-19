@@ -63,7 +63,9 @@ export const validateParams = (
 export const validateQuery = (
     schema: ZodType
 ): RequestHandler => {
+
     return (req, res, next) => {
+
         const result = schema.safeParse(req.query);
 
         if (!result.success) {
@@ -75,8 +77,11 @@ export const validateQuery = (
                     message: issue.message
                 }))
             });
+
             return;
         }
+
+        res.locals.validatedQuery = result.data;
 
         next();
     };

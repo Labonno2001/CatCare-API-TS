@@ -8,13 +8,16 @@ const dateSchema = z.string().refine(
     "Date must be a valid YYYY-MM-DD date."
 );
 
-// Reusable non-negative number validation
+// Reusable non-negative water amount validation
 const nonNegativeNumberSchema = z.string()
     .trim()
     .min(1, "A number is required.")
     .refine(
-        value => Number.isFinite(Number(value)) && Number(value) >= 0,
-        "Must be a finite non-negative number."
+        value =>
+            Number.isFinite(Number(value)) &&
+            Number(value) >= 0 &&
+            Number(value) <= 1000,
+        "Must be a finite number between 0 and 1000 ml."
     );
 
 // Reusable positive integer validation
@@ -68,7 +71,7 @@ export const waterAdvancedQuerySchema = z.object({
     limit: positiveIntegerSchema
         .refine(
             value => Number(value) <= 100,
-            "limit must be between 1 and 100."
+            "Limit must be between 1 and 100."
         )
         .optional()
 })

@@ -27,11 +27,11 @@ import {
 // --------------------------------------------------
 
 export const getAllWaterRecordsController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const date = req.query.date as string | undefined;
+    const { date } = res.locals.validatedQuery;
 
     const allRecords = await getAllWaterRecords();
 
@@ -79,11 +79,11 @@ export const createWaterRecordController = async (
 // --------------------------------------------------
 
 export const getWaterDailyTargetController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const date = req.query.date as string;
+    const { date } = res.locals.validatedQuery;
 
     const target = await getWaterDailyTarget(date);
 
@@ -124,11 +124,11 @@ export const saveWaterDailyTargetController = async (
 // --------------------------------------------------
 
 export const getWaterSummaryController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const date = req.query.date as string;
+    const { date } = res.locals.validatedQuery;
 
     const summary = await getWaterSummary(date);
 
@@ -322,7 +322,7 @@ export const deleteWaterRecordController = async (
 // --------------------------------------------------
 
 export const getAdvancedWaterRecordsController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
@@ -336,34 +336,26 @@ export const getAdvancedWaterRecordsController = async (
         order,
         page,
         limit
-    } = req.query as Record<string, string | undefined>;
+    } = res.locals.validatedQuery;
 
-    // Convert query string into the required boolean value.
+    // Convert validated query values into service types.
     const measuredValue: boolean | undefined =
         measured === undefined
             ? undefined
             : measured === "true";
 
-    // Convert query strings into numbers.
-    const minConsumedValue =
-        minConsumedMl === undefined
-            ? undefined
-            : Number(minConsumedMl);
-
-    const maxConsumedValue =
-        maxConsumedMl === undefined
-            ? undefined
-            : Number(maxConsumedMl);
-
-    // Prepare options for the service.
     const options: WaterQueryOptions = {
         startDate,
         endDate,
         measured: measuredValue,
-        minConsumedMl: minConsumedValue,
-        maxConsumedMl: maxConsumedValue,
-        sortBy: sortBy as WaterQueryOptions["sortBy"],
-        order: order as WaterQueryOptions["order"],
+        minConsumedMl: minConsumedMl === undefined
+            ? undefined
+            : Number(minConsumedMl),
+        maxConsumedMl: maxConsumedMl === undefined
+            ? undefined
+            : Number(maxConsumedMl),
+        sortBy,
+        order,
         page: page === undefined ? 1 : Number(page),
         limit: limit === undefined ? 10 : Number(limit)
     };
@@ -381,14 +373,11 @@ export const getAdvancedWaterRecordsController = async (
 // --------------------------------------------------
 
 export const getWaterGroupedController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const { startDate, endDate } = req.query as Record<
-        string,
-        string | undefined
-    >;
+    const { startDate, endDate } = res.locals.validatedQuery;
 
     const groups = await getWaterGrouped(
         startDate,

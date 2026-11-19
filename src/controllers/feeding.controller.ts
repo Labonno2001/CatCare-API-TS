@@ -15,45 +15,16 @@ import {
 
 import { PatchFeedingInput } from "../types/feeding.types";
 
-import { isValidDate } from "../utils/validation";
-
-
-// Validate positive integer query parameters.
-const isPositiveInteger = (value: unknown): boolean => {
-    return (
-        typeof value === "string" &&
-        /^\d+$/.test(value) &&
-        Number.isSafeInteger(Number(value)) &&
-        Number(value) > 0
-    );
-};
-
 
 // GET all feeding records.
 export const getAllFeedingRecordsController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const date = req.query.date;
+    const { date } = res.locals.validatedQuery;
 
-    if (
-        date !== undefined &&
-        (
-            typeof date !== "string" ||
-            !isValidDate(date)
-        )
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid date. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    const records = await getAllFeedingRecords(
-        date as string | undefined
-    );
+    const records = await getAllFeedingRecords(date);
 
     res.status(200).json({
         success: true,
@@ -65,7 +36,7 @@ export const getAllFeedingRecordsController = async (
 
 // GET advanced feeding records.
 export const getAdvancedFeedingRecordsController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
@@ -78,95 +49,15 @@ export const getAdvancedFeedingRecordsController = async (
         order,
         page,
         limit
-    } = req.query;
-
-    if (
-        (startDate !== undefined &&
-            (typeof startDate !== "string" || !isValidDate(startDate))) ||
-        (endDate !== undefined &&
-            (typeof endDate !== "string" || !isValidDate(endDate)))
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid date. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    if (
-        typeof startDate === "string" &&
-        typeof endDate === "string" &&
-        startDate > endDate
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "startDate cannot be later than endDate."
-        });
-        return;
-    }
-
-    if (
-        foodName !== undefined &&
-        (typeof foodName !== "string" || !foodName.trim())
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid foodName."
-        });
-        return;
-    }
-
-    if (
-        mealTime !== undefined &&
-        (typeof mealTime !== "string" || !mealTime.trim())
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid mealTime."
-        });
-        return;
-    }
-
-    if (
-        sortBy !== undefined &&
-        !["recordDate", "quantityGrams", "foodName"].includes(sortBy as string)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid sortBy field."
-        });
-        return;
-    }
-
-    if (
-        order !== undefined &&
-        !["ASC", "DESC"].includes(order as string)
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "order must be ASC or DESC."
-        });
-        return;
-    }
-
-    if (
-        (page !== undefined && !isPositiveInteger(page)) ||
-        (limit !== undefined && !isPositiveInteger(limit))
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "page and limit must be positive integers."
-        });
-        return;
-    }
+    } = res.locals.validatedQuery;
 
     const result = await getFeedingRecordsAdvanced({
-        startDate: startDate as string | undefined,
-        endDate: endDate as string | undefined,
-        foodName: foodName as string | undefined,
-        mealTime: mealTime as string | undefined,
-        sortBy: sortBy as "recordDate" | "quantityGrams" | "foodName" | undefined,
-        order: order as "ASC" | "DESC" | undefined,
+        startDate,
+        endDate,
+        foodName,
+        mealTime,
+        sortBy,
+        order,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined
     });
@@ -180,40 +71,15 @@ export const getAdvancedFeedingRecordsController = async (
 
 // GET feeding records grouped by food.
 export const getFeedingGroupedByFoodController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const { startDate, endDate } = req.query;
-
-    if (
-        (startDate !== undefined &&
-            (typeof startDate !== "string" || !isValidDate(startDate))) ||
-        (endDate !== undefined &&
-            (typeof endDate !== "string" || !isValidDate(endDate)))
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid date. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    if (
-        typeof startDate === "string" &&
-        typeof endDate === "string" &&
-        startDate > endDate
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "startDate cannot be later than endDate."
-        });
-        return;
-    }
+    const { startDate, endDate } = res.locals.validatedQuery;
 
     const groups = await getFeedingGroupedByFood(
-        startDate as string | undefined,
-        endDate as string | undefined
+        startDate,
+        endDate
     );
 
     res.status(200).json({
@@ -256,29 +122,13 @@ export const createFeedingRecordController = async (
 
 // GET feeding summary.
 export const getFeedingSummaryController = async (
-    req: Request,
+    _req: Request,
     res: Response
 ): Promise<void> => {
 
-    const date = req.query.date;
+    const { date } = res.locals.validatedQuery;
 
-    if (
-        date !== undefined &&
-        (
-            typeof date !== "string" ||
-            !isValidDate(date)
-        )
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Invalid date. Use YYYY-MM-DD."
-        });
-        return;
-    }
-
-    const summary = await getFeedingSummary(
-        date as string | undefined
-    );
+    const summary = await getFeedingSummary(date);
 
     res.status(200).json({
         success: true,

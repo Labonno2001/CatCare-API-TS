@@ -8,7 +8,8 @@ const feedingFields = {
 
     foodName: z.string()
         .trim()
-        .min(1, "Food name is required."),
+        .min(1, "Food name is required.")
+        .max(100, "Food name cannot exceed 100 characters."),
 
     quantityGrams: z.union([
         z.number(),
@@ -16,16 +17,20 @@ const feedingFields = {
     ])
         .transform(Number)
         .pipe(
-            z.number().positive(
-                "Quantity must be greater than zero."
-            )
+            z.number()
+                .finite()
+                .positive("Quantity must be greater than zero.")
+                .max(1000, "Quantity cannot exceed 1000 grams.")
         ),
 
     mealTime: z.string()
         .trim()
-        .min(1, "Meal time is required."),
+        .min(1, "Meal time is required.")
+        .max(50, "Meal time cannot exceed 50 characters."),
 
-    notes: z.string().optional(),
+    notes: z.string()
+        .max(500, "Notes cannot exceed 500 characters.")
+        .optional(),
 
     recordDate: z.string()
         .refine(

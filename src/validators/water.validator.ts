@@ -15,14 +15,17 @@ const waterFields = {
     ])
         .transform(Number)
         .pipe(
-            z.number().finite().nonnegative(
-                "Consumed water cannot be negative."
-            )
+            z.number()
+                .finite()
+                .nonnegative("Consumed water cannot be negative.")
+                .max(1000, "Consumed water cannot exceed 1000 ml.")
         )
         .nullable()
         .optional(),
 
-    notes: z.string().optional(),
+    notes: z.string()
+        .max(500, "Notes cannot exceed 500 characters.")
+        .optional(),
 
     recordDate: z.string().refine(
         isValidDate,
@@ -58,7 +61,7 @@ export const waterUpdateSchema = waterCreateSchema;
 export const waterPatchSchema = z.object({
     measured: z.boolean().optional(),
     consumedMl: waterFields.consumedMl,
-    notes: z.string().optional(),
+    notes: waterFields.notes,
     recordDate: waterFields.recordDate.optional()
 })
     .strict()
@@ -93,9 +96,10 @@ export const waterDailyTargetSchema = z.object({
     ])
         .transform(Number)
         .pipe(
-            z.number().finite().nonnegative(
-                "Offered water cannot be negative."
-            )
+            z.number()
+                .finite()
+                .nonnegative("Offered water cannot be negative.")
+                .max(1000, "Offered water cannot exceed 1000 ml.")
         ),
 
     recordDate: z.string().refine(

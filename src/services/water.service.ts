@@ -15,6 +15,17 @@ import type {
 } from "../types/water.types";
 
 // --------------------------------------------------
+// Custom PATCH validation error
+// --------------------------------------------------
+
+export class WaterPatchValidationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "WaterPatchValidationError";
+    }
+}
+
+// --------------------------------------------------
 // Repositories
 // --------------------------------------------------
 
@@ -174,8 +185,7 @@ export const saveWaterDailyTarget = async (
 
     const now = new Date().toISOString();
 
-    // If a target already exists for this date,
-    // update that target instead of creating another one.
+    // Update the existing target for this date.
     if (existingTarget) {
         existingTarget.offeredMl = input.offeredMl;
         existingTarget.updatedAt = now;
@@ -185,7 +195,7 @@ export const saveWaterDailyTarget = async (
         return formatDailyTarget(updatedTarget);
     }
 
-    // Create a new daily target if one does not exist.
+    // Create a new daily target.
     const newTarget = dailyTargetRepository.create({
         cat,
         recordDate: input.recordDate,
@@ -208,7 +218,6 @@ export const getWaterSummary = async (
 ): Promise<WaterDailySummary> => {
     const cat = await getDefaultCat();
 
-    // Get consumption records for the requested date.
     const waterResult = await waterRepository
         .createQueryBuilder("water")
         .innerJoin("water.cat", "cat")
@@ -237,7 +246,6 @@ export const getWaterSummary = async (
         )
         .getRawOne();
 
-    // Get the single offered water target for the requested date.
     const target = await dailyTargetRepository.findOne({
         where: {
             cat: { id: cat.id },
@@ -331,18 +339,41 @@ export const patchWaterRecord = async (
         return null;
     }
 
-    if (input.consumedMl !== undefined) {
-        record.consumedMl = input.consumedMl;
+    // Determine the final measurement status.
+    const resultingMeasured =
+        input.measured ?? (record.measured === 1);
+
+    // Determine the final consumed water value.
+    const resultingConsumed =
+        !resultingMeasured
+            ? null
+            : input.consumedMl !== undefined
+                ? input.consumedMl
+                : record.consumedMl;
+
+    // Validate the final state.
+    if (
+        resultingMeasured &&
+        (resultingConsumed === null || resultingConsumed === undefined)
+    ) {
+        throw new WaterPatchValidationError(
+            "Consumed water is required when measurement is enabled."
+        );
     }
 
-    if (input.measured !== undefined) {
-        record.measured = input.measured ? 1 : 0;
-
-        // If measurement is disabled, clear the old intake amount.
-        if (!input.measured) {
-            record.consumedMl = null;
-        }
+    if (
+        !resultingMeasured &&
+        input.consumedMl !== undefined &&
+        input.consumedMl !== null
+    ) {
+        throw new WaterPatchValidationError(
+            "Consumed water cannot be recorded when measurement is disabled."
+        );
     }
+
+    // Apply the final values.
+    record.measured = resultingMeasured ? 1 : 0;
+    record.consumedMl = resultingConsumed;
 
     if (input.notes !== undefined) {
         record.notes = input.notes;
@@ -352,8 +383,7 @@ export const patchWaterRecord = async (
         record.recordDate = input.recordDate;
     }
 
-    // PATCH changes only the individual consumption record.
-    // It never modifies the daily offered water target.
+    // PATCH never modifies the daily offered water target.
     const updatedRecord = await waterRepository.save(record);
 
     return formatWater(updatedRecord);

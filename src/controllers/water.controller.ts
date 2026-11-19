@@ -13,7 +13,8 @@ import {
     getWaterGrouped,
     getWaterDailyTarget,
     saveWaterDailyTarget,
-    WaterQueryOptions
+    WaterQueryOptions,
+    WaterPatchValidationError
 } from "../services/water.service";
 
 import {
@@ -75,7 +76,6 @@ export const createWaterRecordController = async (
 
 // --------------------------------------------------
 // GET water daily target
-// GET /api/water/daily-target?date=YYYY-MM-DD
 // --------------------------------------------------
 
 export const getWaterDailyTargetController = async (
@@ -95,7 +95,6 @@ export const getWaterDailyTargetController = async (
 
 // --------------------------------------------------
 // PUT water daily target
-// PUT /api/water/daily-target
 // --------------------------------------------------
 
 export const saveWaterDailyTargetController = async (
@@ -210,19 +209,8 @@ export const patchWaterRecordController = async (
     res: Response
 ): Promise<void> => {
 
-    const existingRecord = await getWaterRecordById(
-        Number(req.params.id)
-    );
-
-    if (!existingRecord) {
-        res.status(404).json({
-            success: false,
-            message: "Water record not found."
-        });
-        return;
-    }
-
     const body = req.body;
+
     const input: PatchWaterInput = {};
 
     if (body.consumedMl !== undefined) {
@@ -241,55 +229,38 @@ export const patchWaterRecordController = async (
         input.recordDate = body.recordDate;
     }
 
-    // Preserve the existing business rules.
-    const resultingMeasured =
-        input.measured ?? existingRecord.measured;
+    try {
+        const record = await patchWaterRecord(
+            Number(req.params.id),
+            input
+        );
 
-    const resultingConsumed =
-        input.measured === false
-            ? null
-            : input.consumedMl !== undefined
-                ? input.consumedMl
-                : existingRecord.consumedMl;
+        if (!record) {
+            res.status(404).json({
+                success: false,
+                message: "Water record not found."
+            });
+            return;
+        }
 
-    if (resultingMeasured && resultingConsumed === null) {
-        res.status(400).json({
-            success: false,
-            message: "Consumed water is required when measurement is enabled."
+        res.status(200).json({
+            success: true,
+            message: "Water record updated!",
+            record
         });
-        return;
+
+    } catch (error) {
+
+        if (error instanceof WaterPatchValidationError) {
+            res.status(400).json({
+                success: false,
+                message: error.message
+            });
+            return;
+        }
+
+        throw error;
     }
-
-    if (
-        !resultingMeasured &&
-        input.consumedMl !== undefined &&
-        input.consumedMl !== null
-    ) {
-        res.status(400).json({
-            success: false,
-            message: "Consumed water cannot be recorded when measurement is disabled."
-        });
-        return;
-    }
-
-    const record = await patchWaterRecord(
-        Number(req.params.id),
-        input
-    );
-
-    if (!record) {
-        res.status(404).json({
-            success: false,
-            message: "Water record not found."
-        });
-        return;
-    }
-
-    res.status(200).json({
-        success: true,
-        message: "Water record updated!",
-        record
-    });
 };
 
 // --------------------------------------------------
@@ -338,7 +309,6 @@ export const getAdvancedWaterRecordsController = async (
         limit
     } = res.locals.validatedQuery;
 
-    // Convert validated query values into service types.
     const measuredValue: boolean | undefined =
         measured === undefined
             ? undefined

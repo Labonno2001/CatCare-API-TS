@@ -11,25 +11,43 @@ import feedingRoutes from "./routes/feeding.routes";
 import waterRoutes from "./routes/water.routes";
 import wellnessRoutes from "./routes/wellness.routes";
 
-import { errorHandler } from "./middleware/error.middleware";
+import {
+    errorHandler,
+    notFoundHandler
+} from "./middleware/error.middleware";
 
-// Load environment variables.
+// --------------------------------------------------
+// Load environment variables
+// --------------------------------------------------
+
 dotenv.config();
 
-// Create Express application.
+// --------------------------------------------------
+// Create Express application
+// --------------------------------------------------
+
 const app = express();
 
-// Middleware.
+// --------------------------------------------------
+// Middleware
+// --------------------------------------------------
+
 app.use(cors());
 app.use(express.json());
 
-// API routes.
+// --------------------------------------------------
+// API routes
+// --------------------------------------------------
+
 app.use("/api/cat", catRoutes);
 app.use("/api/feeding", feedingRoutes);
 app.use("/api/water", waterRoutes);
 app.use("/api/wellness", wellnessRoutes);
 
-// Serve frontend files.
+// --------------------------------------------------
+// Serve frontend files
+// --------------------------------------------------
+
 const publicPath = path.join(process.cwd(), "public");
 
 app.use(express.static(publicPath));
@@ -38,7 +56,10 @@ app.get("/", (_req, res) => {
     res.sendFile(path.join(publicPath, "index.html"));
 });
 
-// Health check.
+// --------------------------------------------------
+// Health check
+// --------------------------------------------------
+
 app.get("/api/health", (_req, res: Response) => {
     res.status(200).json({
         success: true,
@@ -48,23 +69,31 @@ app.get("/api/health", (_req, res: Response) => {
     });
 });
 
-// Handle unknown routes.
-app.use((_req, res) => {
-    res.status(404).json({
-        success: false,
-        message: "Route not found."
-    });
-});
+// --------------------------------------------------
+// Handle unknown routes
+// --------------------------------------------------
 
-// Global error handler.
+app.use(notFoundHandler);
+
+// --------------------------------------------------
+// Global error handler
+// --------------------------------------------------
+
 app.use(errorHandler);
 
-// Server configuration.
+// --------------------------------------------------
+// Server configuration
+// --------------------------------------------------
+
 const PORT = process.env.PORT || 3000;
 
-// Start server.
+// --------------------------------------------------
+// Start server
+// --------------------------------------------------
+
 const startServer = async (): Promise<void> => {
     try {
+
         // 1. Initialize TypeORM connection.
         if (!AppDataSource.isInitialized) {
             await AppDataSource.initialize();
@@ -106,6 +135,7 @@ const startServer = async (): Promise<void> => {
         });
 
     } catch (error) {
+
         console.error("Failed to start CatCare API:", error);
 
         // Close database connection if initialization succeeded.
@@ -117,5 +147,10 @@ const startServer = async (): Promise<void> => {
     }
 };
 
-// Start application.
+// --------------------------------------------------
+// Start application
+// --------------------------------------------------
+
 void startServer();
+
+export default app;

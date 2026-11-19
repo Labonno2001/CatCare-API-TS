@@ -14,9 +14,9 @@ const catProfileFields = {
         .max(30, "Age cannot exceed 30 years."),
 
     weightKg: z.number()
-        .finite()
-        .positive("Weight must be greater than zero.")
-        .max(50, "Weight cannot exceed 50 kg."),
+    .finite("Weight must be a valid number.")
+    .positive("Weight must be greater than 0 kg.")
+    .max(30, "Weight cannot exceed 30 kg."),
 
     favoriteFood: z.string()
         .trim()

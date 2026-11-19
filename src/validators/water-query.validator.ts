@@ -2,16 +2,25 @@
 import { z } from "zod";
 import { isValidDate } from "../utils/validation";
 
+// --------------------------------------------------
 // Reusable date validation
+// --------------------------------------------------
+
 const dateSchema = z.string().refine(
     isValidDate,
     "Date must be a valid YYYY-MM-DD date."
 );
 
+// --------------------------------------------------
 // Reusable non-negative water amount validation
+// --------------------------------------------------
+
 const nonNegativeNumberSchema = z.string()
     .trim()
-    .min(1, "A number is required.")
+    .regex(
+        /^\d+(\.\d+)?$/,
+        "Must be a valid decimal number."
+    )
     .refine(
         value =>
             Number.isFinite(Number(value)) &&
@@ -20,36 +29,57 @@ const nonNegativeNumberSchema = z.string()
         "Must be a finite number between 0 and 1000 ml."
     );
 
+// --------------------------------------------------
 // Reusable positive integer validation
+// --------------------------------------------------
+
 const positiveIntegerSchema = z.string()
-    .regex(/^[1-9]\d*$/, "Must be a positive integer.")
+    .regex(
+        /^[1-9]\d*$/,
+        "Must be a positive integer."
+    )
     .refine(
         value => Number.isSafeInteger(Number(value)),
         "Number is outside the supported integer range."
     );
 
+// --------------------------------------------------
 // GET /api/water?date=
+// --------------------------------------------------
+
 export const waterDateQuerySchema = z.object({
     date: dateSchema.optional()
-});
+}).strict();
 
+// --------------------------------------------------
 // GET /api/water/daily-target?date=
+// --------------------------------------------------
+
 export const waterDailyTargetQuerySchema = z.object({
     date: dateSchema
-});
+}).strict();
 
+// --------------------------------------------------
 // GET /api/water/summary?date=
+// --------------------------------------------------
+
 export const waterSummaryQuerySchema = z.object({
     date: dateSchema
-});
+}).strict();
 
+// --------------------------------------------------
 // GET /api/water/advanced
+// --------------------------------------------------
+
 export const waterAdvancedQuerySchema = z.object({
     startDate: dateSchema.optional(),
 
     endDate: dateSchema.optional(),
 
-    measured: z.enum(["true", "false"]).optional(),
+    measured: z.enum([
+        "true",
+        "false"
+    ]).optional(),
 
     minConsumedMl: nonNegativeNumberSchema.optional(),
 
@@ -75,40 +105,45 @@ export const waterAdvancedQuerySchema = z.object({
         )
         .optional()
 })
-.refine(
-    data =>
-        !data.startDate ||
-        !data.endDate ||
-        data.startDate <= data.endDate,
-    {
-        message: "startDate cannot be later than endDate.",
-        path: ["endDate"]
-    }
-)
-.refine(
-    data =>
-        data.minConsumedMl === undefined ||
-        data.maxConsumedMl === undefined ||
-        Number(data.minConsumedMl) <= Number(data.maxConsumedMl),
-    {
-        message: "minConsumedMl cannot be greater than maxConsumedMl.",
-        path: ["maxConsumedMl"]
-    }
-);
+    .strict()
+    .refine(
+        data =>
+            !data.startDate ||
+            !data.endDate ||
+            data.startDate <= data.endDate,
+        {
+            message: "startDate cannot be later than endDate.",
+            path: ["endDate"]
+        }
+    )
+    .refine(
+        data =>
+            data.minConsumedMl === undefined ||
+            data.maxConsumedMl === undefined ||
+            Number(data.minConsumedMl) <= Number(data.maxConsumedMl),
+        {
+            message: "minConsumedMl cannot be greater than maxConsumedMl.",
+            path: ["maxConsumedMl"]
+        }
+    );
 
+// --------------------------------------------------
 // GET /api/water/grouped?startDate=&endDate=
+// --------------------------------------------------
+
 export const waterGroupedQuerySchema = z.object({
     startDate: dateSchema.optional(),
 
     endDate: dateSchema.optional()
 })
-.refine(
-    data =>
-        !data.startDate ||
-        !data.endDate ||
-        data.startDate <= data.endDate,
-    {
-        message: "startDate cannot be later than endDate.",
-        path: ["endDate"]
-    }
-);
+    .strict()
+    .refine(
+        data =>
+            !data.startDate ||
+            !data.endDate ||
+            data.startDate <= data.endDate,
+        {
+            message: "startDate cannot be later than endDate.",
+            path: ["endDate"]
+        }
+    );
